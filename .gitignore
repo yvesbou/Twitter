@@ -1,0 +1,6 @@
+# macOS and pycharm specific, used: https://www.toptal.com/developers/gitignore
+.DS_Store
+.AppleDouble
+.LSOverride
+# other
+Scratches/
