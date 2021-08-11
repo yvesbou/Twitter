@@ -10,7 +10,7 @@ class TwitterObject:
         print(output)"""
 
     @classmethod
-    def createFromJson(cls, data):
+    def createFromDict(cls, data):
         created_instance = cls(**data)
         return created_instance
 
@@ -21,7 +21,7 @@ class TwitterObject:
         pass
 
 
-class TwitterUser2(TwitterObject):
+class TwitterUser(TwitterObject):
     def __init__(self, **kwargs):
         super().__init__()
         self.created_at = None
@@ -48,7 +48,7 @@ class TwitterUser2(TwitterObject):
 
     def __str__(self):
         """
-        not ready
+        ! not ready !
         :return:
         """
         output = []
@@ -58,6 +58,7 @@ class TwitterUser2(TwitterObject):
 
     def createUsersFromFriends(self, data):
         """
+        deprecated!
         takes a whole list of user data in json format and returns a list of twitter-user instances
         and the func adds the self directly as follower to the created users
         :param data: list of json formatted twitter user
@@ -66,33 +67,60 @@ class TwitterUser2(TwitterObject):
         output = []
         # todo: goal is to have dictionaries of each friend and loop through them
         for friend in data:
-            instance = self.createFromJson(friend)
+            instance = self.createFromDict(friend)
             instance.createFollower(self)
             output.append(instance)
         self.friends.extend(output)
         return output
 
     def createUsersFromFollowers(self, data):
+        """
+        deprecated!
+        :param data:
+        :return:
+        """
         output = []
         for follower in data:
-            instance = self.createFromJson(follower)
+            instance = self.createFromDict(follower)
             instance.createFriend(self)
             output.append(instance)
         self.followers.extend(output)
         return output
 
-    def createFollower(self, follower):
+    def saveFollowers(self, followersList):
+        """
+        stores multiple followers for an user instance
+        :param followersList: a list
+        """
+        self.followers.extend(followersList)
+
+    def saveSingleFollower(self, follower):
+        """
+        stores single follower for an user instance
+        :param follower:
+        """
         self.followers.append(follower)
 
-    def createFriend(self, friend):
+    def saveFriends(self, friendsList):
+        """
+        stores multiple friends for an user instance
+        :param friendsList: a list
+        """
+        self.friends.extend(friendsList)
+
+    def saveSingleFriend(self, friend):
+        """
+        stores single friend for an user instance
+        :param friend:
+        """
         self.friends.append(friend)
 
     @classmethod
-    def createFromJson(cls, data):
-        # todo: why does the instance store data, why is public metrics not distilled in seperate fields
+    def createFromDict(cls, data):
         """
-        Json format used to instantiate twitter user
-        :param data: dictionary json that contains information about a user
+        Json derived dict used to instantiate twitter user, if from friend or follower lookup loop through json,
+        and for user lookup json dictionary indexed with ['data'], such that multiple functions work with the same function
+        :param data: dictionary that contains information about a user
         :return: instance of twitter user class
         """
         tmp = []
@@ -104,7 +132,9 @@ class TwitterUser2(TwitterObject):
                 instantiationData[key] = value  # ie. value not a dictionary
             else:  # no exception raised
                 for (secLvlKey, secLvlvalue) in items:
+                    # entities is not in higher resolution in the fields
                     if key == 'entities':
+                        instantiationData[key] = value  # for entities
                         continue
                     tmp.append((secLvlKey, secLvlvalue))
         for secLvlKey, value in tmp:
@@ -116,77 +146,3 @@ class TwitterUser2(TwitterObject):
 
     def getFriendsCount(self):
         return self.following_count
-
-
-class TwitterUser(TwitterObject):
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.param_defaults = {
-            "created_at": None,  # i['data']['created_at']
-            "description": None,  # i['data']['description']
-            "entities": None,  # i['data']['entities'] there is more to it, leave it for now (any url in the bio is mentioned)
-            "id": None,  # i['data']['id']
-            "location": None,  # i['data']['location']
-            "name": None,  # i['data']['name']
-            "pinned_tweet_id": None,  # i['data']['pinned_tweet_id']
-            "profile_image_url": None,  # i['data']['profile_image_url']
-            "protected": None,  # i['data']['protected']
-            "followers_count": None,  # ['data']['public_metrics']['followers_count']
-            "following_count": None,  # ['data']['public_metrics']['following_count']
-            "tweet_count": None,  # ['data']['public_metrics']['tweet_count']
-            "listed_count": None,  # ['data']['public_metrics']['listed_count']
-            "url": None,  # i['data']['url']
-            "username": None,  # i['data']['username']
-            "verified": None,  # i['data']['verified']
-            "withheld": None}  # haven't seen in ali abdaal response
-
-        for (param, default) in self.param_defaults.items():
-            setattr(self, param, kwargs.get(param, default))
-
-    @classmethod
-    def createFromJson(cls, data):
-        data = data['data'].copy()
-        tmp = []
-        for (key, value) in data.items():
-            try:
-                items = value.items()
-            except (AttributeError, TypeError):
-                pass
-                #print(f"{value} is not a dictionary")
-            else:  # no exception raised
-                #print(type(items))
-                for (secLvlKey, value) in items:
-                    tmp.append((secLvlKey, value))
-        for secLvlKey, value in tmp:
-            data[secLvlKey] = value
-        return super().createFromJson(data)
-
-    def getFollowersCount(self):
-        return self.followers_count
-
-    def getFriendsCount(self):
-        return self.following_count
-
-
-
-
-
-i = {'data': {
-    'public_metrics': {'followers_count': 96260, 'following_count': 1146, 'tweet_count': 5452, 'listed_count': 833},
-    'protected': False,
-    'profile_image_url': 'https://pbs.twimg.com/profile_images/1157059189161619456/Ke7LQ7NO_normal.jpg',
-    'id': '30436279', 'url': 'https://t.co/dKqFKMFhvC', 'created_at': '2009-04-11T11:49:42.000Z',
-    'description': '👨\u200d⚕️ Doctor, 🧪 YouTuber, 🎙 Podcaster @noverthinking. I teach people how to be Part-Time YouTubers - https://t.co/WNUElMBhFB',
-    'name': 'Ali Abdaal', 'entities': {'url': {'urls': [{'start': 0, 'end': 23, 'url': 'https://t.co/dKqFKMFhvC',
-                                                         'expanded_url': 'https://www.youtube.com/aliabdaal',
-                                                         'display_url': 'youtube.com/aliabdaal'}]}, 'description': {
-        'urls': [{'start': 100, 'end': 123, 'url': 'https://t.co/WNUElMBhFB',
-                  'expanded_url': 'http://academy.aliabdaal.com', 'display_url': 'academy.aliabdaal.com'}],
-        'mentions': [{'start': 37, 'end': 51, 'username': 'noverthinking'}]}}, 'location': 'Cambridge, UK',
-    'username': 'AliAbdaal', 'pinned_tweet_id': '1365367682619564038', 'verified': False}}
-
-#a = TwitterUser2(i)
-#b = TwitterUser(i)
-
-#a.location
-#b.location

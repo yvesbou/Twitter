@@ -2,9 +2,9 @@ import requests
 import math
 import time
 
-from TwitterUser import TwitterUser2
+from twitter.TwitterUser import TwitterUser
 
-from Error import APIError
+from twitter.Error import APIError
 
 
 class TwitterAPI(object):
@@ -35,44 +35,72 @@ class TwitterAPI(object):
         # print(response)
         return response.json()
 
+    def _getFollowsResponse(self, user, Friends=True, firstPage=True, token=None):
+        """
+        utility function for getFriends and getFollowers
+        :param user: user from which friends or followers should be obtained
+        :param Friends: specifies if Friends or Followers should be returned
+        :param firstPage: specifies whether it's the first page of the request
+        :param token: used to specify which page if not first page
+        :return: response in json format passed to getFriends or getFollowers
+        """
+        if Friends:
+            str_input = "users/" + str(user.id) + "/" + "following"
+        else:
+            str_input = "users/" + str(user.id) + "/" + "followers"
+
+        params = {'user.fields': self._userFields, 'max_results': '1000'}
+        if not firstPage:
+            params['pagination_token'] = token
+
+        response = self._makeRequest(str_input, params)
+        if 'errors' in response.keys():
+            raise APIError(response['errors'][0]['message'])
+
+        return response
+
+    @staticmethod
+    def _followsToList(user, response):
+        follows = []
+        for follow in response['data']:
+            followInstance = TwitterUser.createFromDict(follow)
+            followInstance.saveSingleFollower(user)
+            follows.append(followInstance)
+        return follows
+
     def getFollowers(self, user):
         """
         Basic Account v2 API: Follow look-up: 15 requests per 15 minutes
         This function requests followers from an account
         :param user: user instance from that followers should be obtained
-        :return: the result of the request
+        :return: list of followers from user that was specified by input
         """
         max_requests = 15
         numFollowers = user.getFollowersCount()
-        iterations = math.ceil(numFollowers/1000)
+        # todo: [postponed] problem, how to weight how many iterations, making exponential differences linear, 20000 instead 15000 contacts or mapping to a function with upper and lower limit
+        iterations = math.ceil(numFollowers / 1000)
         if iterations > max_requests:
             iterations = max_requests
-        str_input = "users/" + str(user.id) + "/" + "followers"
-        params = {'user.fields': self._userFields, 'max_results': '1000'}
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
-        followers = []
-        for follower in response['data']:
-            followerInstance = TwitterUser2.createFromJson(follower)
-            followerInstance.createFriend(user)
-            followers.append(followerInstance)
 
+        response = self._getFollowsResponse(user=user, Friends=False)
+        followers = self._followsToList(user, response)
+
+        # todo: [o] request security/robustness regarding limits -> time sleep, try and catch
+        # todo: [o] importance sampling
         for i in range(0, iterations):
+
             if 'next_token' in response['meta'].keys():
                 token = response['meta']['next_token']
-                params['pagination_token'] = token
-                response = self._makeRequest(str_input, params)
+
+                response = self._getFollowsResponse(user=user, Friends=False, firstPage=False, token=token)
+
                 if 'errors' in response.keys():
                     raise APIError(response['errors'][0]['message'])
-                for follower in response['data']:
-                    followerInstance = TwitterUser2.createFromJson(follower)
-                    followerInstance.createFriend(user)
-                    followers.append(followerInstance)
+
+                followers.extend(self._followsToList(user, response))
+
             else:
                 return followers
-
-        return followers
 
     def getFriends(self, user):
         """
@@ -83,50 +111,29 @@ class TwitterAPI(object):
         userInstanceFriends = api.getFriends(userInstance)
 
         :param user: user instance from that friends should be obtained
-        :return: the result of the request
+        :return: list of friends from user that was specified by input
         """
         max_requests = 15
         numFriends = user.getFriendsCount()
         # todo: [postponed] problem, how to weight how many iterations, making exponential differences linear, 20000 instead 15000 contacts or mapping to a function with upper and lower limit
-        iterations = math.ceil(numFriends/1000)
+        iterations = math.ceil(numFriends / 1000)
         if iterations > max_requests:
             iterations = max_requests
-        start = time.time()
-        str_input = "users/" + str(user.id) + "/" + "following"
-        params = {'user.fields': self._userFields, 'max_results': '1000'}
-        friends = []
-        response = self._makeRequest(str_input, params)
-        # max_requests -= 1
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
 
-        for friend in response['data']:
-            friendInstance = TwitterUser2.createFromJson(friend)
-            friendInstance.createFollower(user)
-            friends.append(friendInstance)
+        response = self._getFollowsResponse(user=user)
+        friends = self._followsToList(user, response)
 
         # todo: [o] request security/robustness regarding limits -> time sleep, try and catch
         # todo: [o] importance sampling
         for i in range(0, iterations):
-            #if max_requests == 0:
-                #now = time.time()
-                #if now - start > 15*60:
-                    #start = now
-                    #continue
-                #else:
-                    #time.sleep(15*60 - (now-start))
             if 'next_token' in response['meta'].keys():
                 token = response['meta']['next_token']
-                params['pagination_token'] = token
-                response = self._makeRequest(str_input, params)
-                # max_requests -= 1
-                # print(response)
+                response = self._getFollowsResponse(user=user, Friends=True, firstPage=False, token=token)
+
                 if 'errors' in response.keys():
                     raise APIError(response['errors'][0]['message'])
-                for friend in response['data']:
-                    friendInstance = TwitterUser2.createFromJson(friend)
-                    friendInstance.createFollower(user)
-                    friends.append(friendInstance)
+
+                friends.extend(self._followsToList(user, response))
             else:
                 return friends
 
@@ -176,8 +183,7 @@ class TwitterAPI(object):
         if 'errors' in response.keys():
             raise APIError(response['errors'][0]['message'])
 
-        # todo: create instance
-        user = TwitterUser2.createFromJson(response['data'])
+        user = TwitterUser.createFromDict(response['data'])  # key needed to make method in TwitterUser working for other cases as well
         return user
 
     def getLikedTweetsByUserId(self, userid):
