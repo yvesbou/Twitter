@@ -2,12 +2,12 @@ import inspect
 
 
 class TwitterObject:
-    def __init__(self):
+    """def __init__(self):
         self.param_defaults = {}
 
     def __repr__(self):
         output = [(key, value) for key, value in self.param_defaults.items()]
-        print(output)
+        print(output)"""
 
     @classmethod
     def createFromJson(cls, data):
@@ -46,12 +46,15 @@ class TwitterUser2(TwitterObject):
         for (param, attribute) in kwargs.items():
             setattr(self, param, attribute)
 
-    """    def __str__(self):
-            output = []
-            attributes = inspect.getmembers(self)
-            attributes = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
-            print(attributes)
-            return attributes"""
+    def __str__(self):
+        """
+        not ready
+        :return:
+        """
+        output = []
+        attributes = inspect.getmembers(self)
+        attributes = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
+        return str(attributes)
 
     def createUsersFromFriends(self, data):
         """
@@ -86,23 +89,27 @@ class TwitterUser2(TwitterObject):
 
     @classmethod
     def createFromJson(cls, data):
+        # todo: why does the instance store data, why is public metrics not distilled in seperate fields
         """
         Json format used to instantiate twitter user
         :param data: dictionary json that contains information about a user
         :return: instance of twitter user class
         """
         tmp = []
+        instantiationData = {}
         for (key, value) in data.items():
             try:
                 items = value.items()
             except (AttributeError, TypeError):
-                pass  # ie. value not a dictionary
+                instantiationData[key] = value  # ie. value not a dictionary
             else:  # no exception raised
-                for (secLvlKey, value) in items:
-                    tmp.append((secLvlKey, value))
+                for (secLvlKey, secLvlvalue) in items:
+                    if key == 'entities':
+                        continue
+                    tmp.append((secLvlKey, secLvlvalue))
         for secLvlKey, value in tmp:
-            data[secLvlKey] = value
-        return super().createFromJson(data)
+            instantiationData[secLvlKey] = value
+        return cls(**instantiationData)
 
     def getFollowersCount(self):
         return self.followers_count

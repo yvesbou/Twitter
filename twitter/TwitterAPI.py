@@ -36,7 +36,6 @@ class TwitterAPI(object):
         return response.json()
 
     def getFollowers(self, user):
-        # todo: [x] rewrite this function
         """
         Basic Account v2 API: Follow look-up: 15 requests per 15 minutes
         This function requests followers from an account
@@ -55,7 +54,9 @@ class TwitterAPI(object):
             raise APIError(response['errors'][0]['message'])
         followers = []
         for follower in response['data']:
-            followers.append(follower)
+            followerInstance = TwitterUser2.createFromJson(follower)
+            followerInstance.createFriend(user)
+            followers.append(followerInstance)
 
         for i in range(0, iterations):
             if 'next_token' in response['meta'].keys():
@@ -65,7 +66,9 @@ class TwitterAPI(object):
                 if 'errors' in response.keys():
                     raise APIError(response['errors'][0]['message'])
                 for follower in response['data']:
-                    followers.append(follower)
+                    followerInstance = TwitterUser2.createFromJson(follower)
+                    followerInstance.createFriend(user)
+                    followers.append(followerInstance)
             else:
                 return followers
 
@@ -75,11 +78,13 @@ class TwitterAPI(object):
         """
         Basic Account v2 API: Follow look-up: 15 requests per 15 minutes
         This function requests friends from an account
+
+        desired usage:
+        userInstanceFriends = api.getFriends(userInstance)
+
         :param user: user instance from that friends should be obtained
         :return: the result of the request
         """
-        # todo: [x] make twitter user, in order to obtain follower count
-        # todo: [x] w/ follower count compute how long it takes to obtain all followers w/ 15X1000 requests per 15min 60k/hour 1.2M/day
         max_requests = 15
         numFriends = user.getFriendsCount()
         # todo: [postponed] problem, how to weight how many iterations, making exponential differences linear, 20000 instead 15000 contacts or mapping to a function with upper and lower limit
@@ -96,9 +101,11 @@ class TwitterAPI(object):
             raise APIError(response['errors'][0]['message'])
 
         for friend in response['data']:
-            friends.append(friend)
+            friendInstance = TwitterUser2.createFromJson(friend)
+            friendInstance.createFollower(user)
+            friends.append(friendInstance)
 
-        # todo: [x] request security/robustness regarding limits
+        # todo: [o] request security/robustness regarding limits -> time sleep, try and catch
         # todo: [o] importance sampling
         for i in range(0, iterations):
             #if max_requests == 0:
@@ -117,7 +124,9 @@ class TwitterAPI(object):
                 if 'errors' in response.keys():
                     raise APIError(response['errors'][0]['message'])
                 for friend in response['data']:
-                    friends.append(friend)
+                    friendInstance = TwitterUser2.createFromJson(friend)
+                    friendInstance.createFollower(user)
+                    friends.append(friendInstance)
             else:
                 return friends
 
@@ -140,7 +149,7 @@ class TwitterAPI(object):
         :param withExpansion: request additional data objects that relate to the originally returned users
         :param id/userName: user id or username of account to look-up
         :param userIds list of user ids from that user data should be requested
-        :return: json format of user profile
+        :return: user instance defined in class TwitterUser2
         """
         if not any([id, userName, userIds, userNames]):
             raise APIError("Please provide id or Username or list of UserIds")
@@ -166,17 +175,10 @@ class TwitterAPI(object):
         response = self._makeRequest(str_input, params)
         if 'errors' in response.keys():
             raise APIError(response['errors'][0]['message'])
-        return response
 
-    # not used anymore because user instances
-    def getUserIdByName(self, username):
-        """
-        Translating Username to ID
-        :param username
-        :return: ID
-        """
-        userid = self.getUser(userName=username)['data']['id']
-        return userid
+        # todo: create instance
+        user = TwitterUser2.createFromJson(response['data'])
+        return user
 
     def getLikedTweetsByUserId(self, userid):
         """
