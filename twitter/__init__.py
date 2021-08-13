@@ -1,2 +1,2 @@
-from twitter.TwitterUser import TwitterUser
+from twitter.TwitterEntities import TwitterUser
 from twitter.TwitterAPI import TwitterAPI

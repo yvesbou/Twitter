@@ -54,7 +54,7 @@ class TwitterUserTest(unittest.TestCase):
         self.assertEqual(twitterUser.url, 'https://t.co/dKqFKMFhvC')
         self.assertEqual(twitterUser.location, 'Cambridge, UK')
         self.assertEqual(twitterUser.tweet_count, 5461)
-        self.assertEqual(twitterUser.pinned_tweet_id, '1424407105503645704')
+        self.assertEqual(twitterUser.pinnedTweetId, '1424407105503645704')
         self.assertEqual(twitterUser.profile_image_url, 'https://pbs.twimg.com/profile_images/1157059189161619456/Ke7LQ7NO_normal.jpg')
         self.assertEqual(twitterUser.listed_count, 837)
         self.assertEqual(twitterUser.protected, False)

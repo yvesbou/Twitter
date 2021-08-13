@@ -1,7 +1,10 @@
 import inspect
+import numpy as np
+
+from twitter.RealWorldEntity import RealWorldEntity
 
 
-class TwitterObject:
+class TwitterEntity:
     """def __init__(self):
         self.param_defaults = {}
 
@@ -21,7 +24,7 @@ class TwitterObject:
         pass
 
 
-class TwitterUser(TwitterObject):
+class TwitterUser(TwitterEntity):
     def __init__(self, **kwargs):
         super().__init__()
         self.created_at = None
@@ -30,11 +33,12 @@ class TwitterUser(TwitterObject):
         self.id = None
         self.location = None
         self.name = None
-        self.pinned_tweet_id = None
+        self.pinnedTweetId = None
         self.profile_image_url = None
         self.protected = None
         self.followers_count = None
         self.following_count = None
+        self.tweets = []
         self.tweet_count = None
         self.listed_count = None
         self.url = None
@@ -146,3 +150,107 @@ class TwitterUser(TwitterObject):
 
     def getFriendsCount(self):
         return self.following_count
+
+
+class Tweet(TwitterEntity):
+    def __init__(self, **kwargs):
+        super().__init__()
+        # part of tweet as expansion fields
+        self.id = None
+        self.conversation_id = None
+        self.text = None
+        self.author_id = None  # todo: make function that can look up user instance via author id (maybe in neo4j) ... wait
+        self.lang = None
+        self.created_at = None
+        self.source = None
+        self.reply_settings = None
+        self.possibly_sensitive = None
+        self.realWorldEntities = []
+        self.reply_count = None
+        self.retweet_count = None
+        self.like_count = None
+        self.quote_count = None
+        self.media = []
+        self.geo = []
+        self.poll = None
+        self.users = []  # mentioned in tweet, not author itself
+        for (param, attribute) in kwargs.items():
+            setattr(self, param, attribute)
+        # part of tweet as non-expansion fields
+        # ....
+
+    @classmethod
+    def createFromDict(cls, data):
+        # todo: maybe the way tweets are instantiated from expansions is not the same as from direct request -> maybe create two functions
+        instantiationData = {}
+        realWorldEntities = []
+
+        for (key, value) in data.items():
+            if key not in ['public_metrics', 'entities', 'context_annotations']:
+                instantiationData[key] = value
+
+            if key == 'public_metrics':
+                for subKey in value.keys():
+                    instantiationData[subKey] = value[subKey]
+
+        url = data['entities']['urls'][0]  # url dictionary, for tweet? entity?
+        instantiationData['url'] = url
+
+        # get real world entities from context annotations
+        descriptionLookup = []
+        for num, realWorldEntityDict in enumerate(data['context_annotations']):
+            rwEntity = RealWorldEntity()
+            for key in realWorldEntityDict['domain'].keys():
+                domainKey = "domain"+key.capitalize()
+                entityKey = "entity"+key.capitalize()
+                setattr(rwEntity, domainKey, realWorldEntityDict['domain'][key])
+                try:
+                    setattr(rwEntity, entityKey, realWorldEntityDict['entity'][key])  # sometimes description is not a valid key for the entity dict
+                except KeyError:
+                    realWorldEntityDict['entity'][key] = "no description"
+                    setattr(rwEntity, entityKey, realWorldEntityDict['entity'][key])
+
+                if key == 'description':
+                    description = realWorldEntityDict['entity'][key].split()
+                    descriptionLookup.append((num, description))
+
+            rwEntity.url = url
+            realWorldEntities.append(rwEntity)
+
+        for realWorldEntityDict in data['entities']['annotations']:
+            rwEntity = RealWorldEntity()
+            rwEntity.entityName = realWorldEntityDict['normalized_text']
+            rwEntity.probability = realWorldEntityDict['probability']
+            rwEntity.start = realWorldEntityDict['start']
+            rwEntity.end = realWorldEntityDict['end']
+            rwEntity.domainName = realWorldEntityDict['type']
+            rwEntity.url = url
+            realWorldEntities.append(rwEntity)
+
+        instantiationData['realWorldEntities'] = realWorldEntities
+
+        return cls(**instantiationData)
+
+
+class Media(TwitterEntity):
+    def __init__(self):
+        super().__init__()
+
+    def createFromDict(cls, data):
+        pass
+
+
+class Poll(TwitterEntity):
+    def __init__(self):
+        super().__init__()
+
+    def createFromDict(cls, data):
+        pass
+
+
+class Place(TwitterEntity):
+    def __init__(self):
+        super().__init__()
+
+    def createFromDict(cls, data):
+        pass
