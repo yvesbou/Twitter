@@ -33,20 +33,20 @@ class TwitterUser(TwitterEntity):
         self.id = None
         self.location = None
         self.name = None
-        self.pinnedTweetId = None
+        self.pinnedTweetId = None  # helps to retrieve pinned tweet object from tweet dict
         self.profile_image_url = None
         self.protected = None
         self.followers_count = None
         self.following_count = None
-        self.tweets = []
+        self.tweets = {}  # todo: create a function that makes a list out of this dictionary?
         self.tweet_count = None
         self.listed_count = None
         self.url = None
         self.username = None
         self.verified = None
         self.withheld = None
-        self.friends = []
-        self.followers = []
+        self.friends = {}
+        self.followers = {}
         for (param, attribute) in kwargs.items():
             setattr(self, param, attribute)
 
@@ -91,33 +91,33 @@ class TwitterUser(TwitterEntity):
         self.followers.extend(output)
         return output
 
-    def saveFollowers(self, followersList):
+    def saveFollowers(self, followers):
         """
         stores multiple followers for an user instance
-        :param followersList: a list
+        :param followers
         """
-        self.followers.extend(followersList)
+        self.followers = {**self.followers, **followers}
 
     def saveSingleFollower(self, follower):
         """
         stores single follower for an user instance
         :param follower:
         """
-        self.followers.append(follower)
+        self.followers[follower.id] = follower
 
-    def saveFriends(self, friendsList):
+    def saveFriends(self, friends):
         """
         stores multiple friends for an user instance
-        :param friendsList: a list
+        :param friends
         """
-        self.friends.extend(friendsList)
+        self.friends = {**self.friends, **friends}
 
     def saveSingleFriend(self, friend):
         """
         stores single friend for an user instance
         :param friend:
         """
-        self.friends.append(friend)
+        self.friends[friend.id] = friend
 
     @classmethod
     def createFromDict(cls, data):
@@ -129,6 +129,8 @@ class TwitterUser(TwitterEntity):
         """
         tmp = []
         instantiationData = {}
+        if type(data) is not dict:
+            print(data)
         for (key, value) in data.items():
             try:
                 items = value.items()
@@ -145,6 +147,10 @@ class TwitterUser(TwitterEntity):
             instantiationData[secLvlKey] = value
         return cls(**instantiationData)
 
+    @classmethod
+    def createFromMention(cls, dictionary):
+        return cls(**dictionary)
+
     def getFollowersCount(self):
         return self.followers_count
 
@@ -159,75 +165,68 @@ class Tweet(TwitterEntity):
         self.id = None
         self.conversation_id = None
         self.text = None
-        self.author_id = None  # todo: make function that can look up user instance via author id (maybe in neo4j) ... wait
+        self.author_id = None   # todo: make function that can look up user instance via author id (maybe in neo4j) ... wait
         self.lang = None
         self.created_at = None
         self.source = None
         self.reply_settings = None
         self.possibly_sensitive = None
-        self.realWorldEntities = []
         self.reply_count = None
         self.retweet_count = None
         self.like_count = None
         self.quote_count = None
+        self.pinned = False
+        self.in_reply_to_user_id = None
+        self.referenced_tweets = None
+        self.realWorldEntities = []
+        self.urls = []
         self.media = []
-        self.geo = []
+        self.geo = []  # place_id is associated with a place
         self.poll = None
-        self.users = []  # mentioned in tweet, not author itself
+        self.hashtags = []
+        self.mentions = []  # mentioned in tweet, not author itself
         for (param, attribute) in kwargs.items():
             setattr(self, param, attribute)
-        # part of tweet as non-expansion fields
-        # ....
 
     @classmethod
-    def createFromDict(cls, data):
-        # todo: maybe the way tweets are instantiated from expansions is not the same as from direct request -> maybe create two functions
+    def createFromDict(cls, data, pinned=False):
         instantiationData = {}
         realWorldEntities = []
 
         for (key, value) in data.items():
-            if key not in ['public_metrics', 'entities', 'context_annotations']:
+            if key not in ['public_metrics', 'entities', 'context_annotations', 'referenced_tweets', 'attachments']:
                 instantiationData[key] = value
+                if pinned:
+                    instantiationData['pinned'] = pinned
 
-            if key == 'public_metrics':
+            elif key == 'public_metrics':
                 for subKey in value.keys():
                     instantiationData[subKey] = value[subKey]
 
-        url = data['entities']['urls'][0]  # url dictionary, for tweet? entity?
-        instantiationData['url'] = url
+            elif key == 'attachments':
+                instantiationData['media'] = value
 
-        # get real world entities from context annotations
-        descriptionLookup = []
-        for num, realWorldEntityDict in enumerate(data['context_annotations']):
-            rwEntity = RealWorldEntity()
-            for key in realWorldEntityDict['domain'].keys():
-                domainKey = "domain"+key.capitalize()
-                entityKey = "entity"+key.capitalize()
-                setattr(rwEntity, domainKey, realWorldEntityDict['domain'][key])
-                try:
-                    setattr(rwEntity, entityKey, realWorldEntityDict['entity'][key])  # sometimes description is not a valid key for the entity dict
-                except KeyError:
-                    realWorldEntityDict['entity'][key] = "no description"
-                    setattr(rwEntity, entityKey, realWorldEntityDict['entity'][key])
+            elif key == 'context_annotations':
+                for realWorldEntityDict in value:
+                    rwEntity = RealWorldEntity()
+                    realWorldEntities.append(rwEntity.createFromDictContextAnnotations(realWorldEntityDict))
 
-                if key == 'description':
-                    description = realWorldEntityDict['entity'][key].split()
-                    descriptionLookup.append((num, description))
-
-            rwEntity.url = url
-            realWorldEntities.append(rwEntity)
-
-        for realWorldEntityDict in data['entities']['annotations']:
-            rwEntity = RealWorldEntity()
-            rwEntity.entityName = realWorldEntityDict['normalized_text']
-            rwEntity.probability = realWorldEntityDict['probability']
-            rwEntity.start = realWorldEntityDict['start']
-            rwEntity.end = realWorldEntityDict['end']
-            rwEntity.domainName = realWorldEntityDict['type']
-            rwEntity.url = url
-            realWorldEntities.append(rwEntity)
-
-        instantiationData['realWorldEntities'] = realWorldEntities
+            elif key == 'entities':
+                instantiationData['mentions'] = []
+                instantiationData['realWorldEntities'] = []
+                for subKey, listDict in value.items():  # possible keys: mentions, hashtags, annotations, urls
+                    if key in ['urls', 'hashtags']:
+                        instantiationData[key] = listDict
+                        continue
+                    for dictionary in listDict:  # possible keys: start, end, and some specific to each category (annotations, mentions)
+                        if key == "mentions":
+                            user = TwitterUser.createFromMention(dictionary)
+                            instantiationData['mentions'].append(user)
+                        elif key == "annotations":
+                            rwEntity = RealWorldEntity()
+                            for rwKey, rwValues in dictionary.items():
+                                setattr(rwEntity, rwKey, rwValues)
+                            instantiationData['realWorldEntities'].append(rwEntity)
 
         return cls(**instantiationData)
 
