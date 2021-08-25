@@ -2,6 +2,7 @@ import inspect
 import numpy as np
 
 from twitter.RealWorldEntity import RealWorldEntity
+import twitter.utils as utils
 
 
 class TwitterEntity:
@@ -47,6 +48,8 @@ class TwitterUser(TwitterEntity):
         self.withheld = None
         self.friends = {}
         self.followers = {}
+        self.start = None
+        self.end = None
         for (param, attribute) in kwargs.items():
             setattr(self, param, attribute)
 
@@ -124,18 +127,21 @@ class TwitterUser(TwitterEntity):
         """
         Json derived dict used to instantiate twitter user, if from friend or follower lookup loop through json,
         and for user lookup json dictionary indexed with ['data'], such that multiple functions work with the same function
+        instantiation of tweet if pinned happens via Tweet.createFromDict called by function in TwitterAPI
         :param data: dictionary that contains information about a user
         :return: instance of twitter user class
         """
         tmp = []
         instantiationData = {}
-        if type(data) is not dict:
-            print(data)
         for (key, value) in data.items():
             try:
                 items = value.items()
             except (AttributeError, TypeError):
-                instantiationData[key] = value  # ie. value not a dictionary
+                if key == "description":
+                    transformed_text = utils.encodeDecodeTwitterText(value)
+                    instantiationData[key] = transformed_text
+                else:
+                    instantiationData[key] = value  # ie. value not a dictionary
             else:  # no exception raised
                 for (secLvlKey, secLvlvalue) in items:
                     # entities is not in higher resolution in the fields
@@ -166,7 +172,7 @@ class Tweet(TwitterEntity):
         self.conversation_id = None
         self.text = None
         self.author_id = None   # todo: make function that can look up user instance via author id (maybe in neo4j) ... wait
-        self.lang = None
+        self.lang = None  # language (2 or 3-letter abbreviation according to ISO 639-2)
         self.created_at = None
         self.source = None
         self.reply_settings = None
@@ -179,10 +185,11 @@ class Tweet(TwitterEntity):
         self.in_reply_to_user_id = None
         self.referenced_tweets = None
         self.realWorldEntities = []
+        self.attachments = None
         self.urls = []
         self.media = []
         self.geo = []  # place_id is associated with a place
-        self.poll = None
+        self.poll = []
         self.hashtags = []
         self.mentions = []  # mentioned in tweet, not author itself
         for (param, attribute) in kwargs.items():
@@ -192,19 +199,20 @@ class Tweet(TwitterEntity):
     def createFromDict(cls, data, pinned=False):
         instantiationData = {}
         realWorldEntities = []
+        if pinned:
+            instantiationData['pinned'] = pinned
 
         for (key, value) in data.items():
-            if key not in ['public_metrics', 'entities', 'context_annotations', 'referenced_tweets', 'attachments']:
-                instantiationData[key] = value
-                if pinned:
-                    instantiationData['pinned'] = pinned
+            if key not in ['public_metrics', 'entities', 'context_annotations', 'referenced_tweets']:
+                if key == "text":
+                    transformed_text = utils.encodeDecodeTwitterText(value)
+                    instantiationData[key] = transformed_text
+                else:
+                    instantiationData[key] = value
 
             elif key == 'public_metrics':
                 for subKey in value.keys():
                     instantiationData[subKey] = value[subKey]
-
-            elif key == 'attachments':
-                instantiationData['media'] = value
 
             elif key == 'context_annotations':
                 for realWorldEntityDict in value:
@@ -215,14 +223,14 @@ class Tweet(TwitterEntity):
                 instantiationData['mentions'] = []
                 instantiationData['realWorldEntities'] = []
                 for subKey, listDict in value.items():  # possible keys: mentions, hashtags, annotations, urls
-                    if key in ['urls', 'hashtags']:
-                        instantiationData[key] = listDict
+                    if subKey in ['urls', 'hashtags']:
+                        instantiationData[subKey] = listDict
                         continue
                     for dictionary in listDict:  # possible keys: start, end, and some specific to each category (annotations, mentions)
-                        if key == "mentions":
+                        if subKey == "mentions":
                             user = TwitterUser.createFromMention(dictionary)
                             instantiationData['mentions'].append(user)
-                        elif key == "annotations":
+                        elif subKey == "annotations":
                             rwEntity = RealWorldEntity()
                             for rwKey, rwValues in dictionary.items():
                                 setattr(rwEntity, rwKey, rwValues)
@@ -232,24 +240,77 @@ class Tweet(TwitterEntity):
 
 
 class Media(TwitterEntity):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__()
+        self.tweet = None
+        self.type = None
+        self.media_key = None
+        self.height = None
+        self.width = None
+        self.url = None
 
+        for (param, attribute) in kwargs.items():
+            setattr(self, param, attribute)
+
+    @classmethod
     def createFromDict(cls, data):
-        pass
+        return cls(**data)
+
+    def saveTweet(self, tweet):
+        """
+        saves the Tweet to which the Media belongs to
+        :param tweet: Tweet Object
+        """
+        self.tweet = tweet
 
 
 class Poll(TwitterEntity):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__()
+        self.tweet = None
+        self.end_datetime = None
+        self.id = None
+        self.voting_status = None
+        self.duration_minutes = None
+        self.options = None
 
+        for (param, attribute) in kwargs.items():
+            setattr(self, param, attribute)
+
+    @classmethod
     def createFromDict(cls, data):
-        pass
+        instantiationData = {}
+        for key, value in data.items():
+            if key == "options":
+                tmp = []
+                for optionDict in value:
+                    tmpString = optionDict['label']
+                    newTmpString = utils.encodeDecodeTwitterText(tmpString)
+                    optionDict['label'] = newTmpString
+                    tmp.append(optionDict)
+                instantiationData[key] = tmp
+            else:
+                instantiationData[key] = value
+        return cls(**instantiationData)
+
+    def saveTweet(self, tweet):
+        """
+        saves the Tweet to which the Poll belongs to
+        :param tweet: Tweet Object
+        """
+        self.tweet = tweet
 
 
 class Place(TwitterEntity):
     def __init__(self):
         super().__init__()
+        self.tweet = None
+        self.tweets = []  # maintain a list of all tweets at this location
 
+    @classmethod
     def createFromDict(cls, data):
-        pass
+        cls(**data)
+
+    def saveTweet(self, tweet):
+        self.tweet = tweet
+        self.tweets.append(tweet)  # maintain a list of all tweets at this location

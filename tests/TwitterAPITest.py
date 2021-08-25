@@ -40,7 +40,6 @@ class TwitterAPITest(unittest.TestCase):
     def testSetUpAPI(self):
         self.assertEqual('xxx', self.api._TwitterAPI__bearer_token)
 
-    # getUser(self, userId=None, userName=None, userIds=None, userNames=None, withExpansion=True):
     @responses.activate
     def testGetUser_withoutExpansion_wUserId(self):
         self.responses = responses.RequestsMock()
@@ -252,6 +251,77 @@ class TwitterAPITest(unittest.TestCase):
         self.assertIsInstance(resp, dict)
         self.assertIsInstance(pinnedTweet, twitter.Tweet)
         self.assertEqual(friend.id, pinnedTweet.author_id)
+
+    @responses.activate
+    def testGetTweet(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/tweet_withoutExpansion.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweet = self.api.getTweet(tweetId=1424757354290159621, withExpansion=True)
+        self.assertIsInstance(tweet, twitter.Tweet)
+        self.assertEqual("1424757354290159621", tweet.id)
+        self.assertEqual("1424757354290159621", tweet.conversation_id)
+        self.assertEqual("Get startup news for founders, not consumers 👉 https://t.co/bSR19MNh6s\n\nAlso, tweet @IndieHackers or use hashtag #indiehackers and we'll retweet genuine questions and requests.\n\nWe've got over 70,000 followers who can potentially help you! 🗺 🧠 👇 https://t.co/ANfyyZY2Jx", tweet.text)
+        self.assertEqual("756326958946922496", tweet.author_id)
+        self.assertEqual("en", tweet.lang)
+        self.assertEqual("2021-08-09T15:39:58.000Z", tweet.created_at)
+        self.assertEqual("Twitter Web App", tweet.source)
+        self.assertEqual("everyone", tweet.reply_settings)
+        self.assertEqual(False, tweet.possibly_sensitive)
+        self.assertEqual(0, tweet.reply_count)
+        self.assertEqual(0, tweet.retweet_count)
+        self.assertEqual(16, tweet.like_count)
+        self.assertEqual(0, tweet.quote_count)
+        self.assertEqual(False, tweet.pinned)
+        self.assertEqual(None, tweet.in_reply_to_user_id)
+        self.assertEqual(None, tweet.referenced_tweets)
+        self.assertEqual([], tweet.realWorldEntities)
+        self.assertEqual([{"start": 47, "end": 70, "url": "https://t.co/bSR19MNh6s", "expanded_url": "https://www.indiehackers.com/newsletter", "display_url": "indiehackers.com/newsletter", "status": 200, "unwound_url": "https://www.indiehackers.com/newsletter"}, {"start": 246, "end": 269, "url": "https://t.co/ANfyyZY2Jx", "expanded_url": "https://twitter.com/IndieHackers/status/1424757354290159621/photo/1", "display_url": "pic.twitter.com/ANfyyZY2Jx"}], tweet.urls)
+        self.assertEqual([], tweet.geo)  # place_id is associated with a place
+        self.assertEqual([], tweet.poll)
+        self.assertEqual([{"start": 113, "end": 126, "tag": "indiehackers"}], tweet.hashtags)
+        self.assertEqual('756326958946922496', tweet.mentions[0].id)
+        self.assertEqual('IndieHackers', tweet.mentions[0].username)
+        self.assertEqual(84, tweet.mentions[0].start)
+        self.assertEqual(97, tweet.mentions[0].end)
+
+    @responses.activate
+    def testGetTweet_withExpansions_poll(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/tweet_wExpansions_poll_user.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweet = self.api.getTweet(tweetId=1199786642468413448, withExpansion=True)
+        poll = tweet.polls[0]
+        self.assertEqual(tweet, poll.tweet)
+        self.assertEqual("2019-11-28T20:26:41.000Z", poll.end_datetime)
+        self.assertEqual("1199786642468413448", poll.id)
+        self.assertEqual("closed", poll.voting_status)
+        self.assertEqual(1440, poll.duration_minutes)
+        self.assertEqual([{'position': 1, 'label': '“C Sharp”', 'votes': 795}, {'position': 2, 'label': '“C Hashtag”', 'votes': 156}],
+                            poll.options)
+
+    @responses.activate
+    def testGetTweet_withExpansions_media(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/tweet_wExpansions_media_user.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweet = self.api.getTweet(tweetId=1424757354290159621, withExpansion=True)
+        media = tweet.media[0]
+        self.assertEqual(tweet, media.tweet)
+        self.assertEqual("photo", media.type)
+        self.assertEqual("3_1424756947169988610", media.media_key)
+        self.assertEqual(421, media.height)
+        self.assertEqual(749, media.width)
+        self.assertEqual("https://pbs.twimg.com/media/E8XA5Q9WUAIXRSe.jpg", media.url)
 
 
 if __name__ == '__main__':

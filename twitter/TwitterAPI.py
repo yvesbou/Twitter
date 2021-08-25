@@ -2,8 +2,7 @@ import requests
 import math
 import time
 
-from twitter.TwitterEntities import TwitterUser
-from twitter.TwitterEntities import Tweet
+from twitter.TwitterEntities import TwitterUser, Tweet, Poll, Place, Media
 
 from twitter.Error import APIError
 
@@ -329,13 +328,12 @@ class TwitterAPI(object):
                     pass
         return users
 
-    def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True, authorInfoWanted=False):
+    def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True):
         """
         This function creates responses for getTweet and getTweets
         :param tweetId:
         :param tweetIds:
         :param withExpansion:
-        :param authorInfoWanted:
         :return:
         """
         params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
@@ -346,44 +344,35 @@ class TwitterAPI(object):
             str_input = "tweets"
             params['ids'] = ','.join([str(id) for id in tweetIds])
         if withExpansion:
-            if authorInfoWanted:
-                params["expansions"] = [
+            params["expansions"] = [
                     "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
-            if not authorInfoWanted:
-                params["expansions"] = [
-                    "attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
         response = self._makeRequest(str_input, params)
         if 'errors' in response.keys():
             raise APIError(response['errors'][0]['message'])
         return response
 
-    def getTweet(self, tweetId=None, withExpansion=True, authorInfoWanted=False):
+    def getTweet(self, tweetId=None, withExpansion=True):
         if not tweetId:
             raise APIError("Please provide TweetId")
-        response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion,
-                                          authorInfoWanted=authorInfoWanted)
+        response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion)
         tweet = Tweet.createFromDict(response['data'])
         conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
-        # todo: test the whole thing with a tweet that has media, poll, place or just one of them
         if 'includes' in response.keys():
-            for twitterEntityList in response['includes'].keys():
-                for twitterEntity in response['includes'][twitterEntityList]:
-                    # todo: make a request to see how data should be edited
-                    # todo: somewhat make poll, place etc objects and match them with their tweet
-                    # todo: possible functions: eachObject.createFromDict(), matchTweetWithEachObject, [Media, Place, Poll, User, Tweet]
-                    entity = conversionDict[twitterEntityList]
-                    twitterEntityInstance = eval(entity).createFromDictContextAnnotations(twitterEntity)
-                    try:
-                        tweet.eval(entity).append(twitterEntityInstance)
-                    except AttributeError:
-                        setattr(tweet, twitterEntityList, [twitterEntityInstance])
+            response['includes'].pop('users', None)  # we don't want to create a user instance for every tweet
+            for key in response['includes'].keys():
+                for twitterEntity in response['includes'][key]:
+                    entity = conversionDict[key]
+                    twitterEntityInstance = eval(entity).createFromDict(twitterEntity)
+                    twitterEntityInstance.saveTweet(tweet=tweet)
+                    if not hasattr(tweet, key):
+                        setattr(tweet, key, [])  # if a list of e.g media instances does not exist yet, create list with this instance
+                    getattr(tweet, key).append(twitterEntityInstance)
         return tweet
 
-    def getTweets(self, tweetIds=None, withExpansion=True, authorInfoWanted=False):
+    def getTweets(self, tweetIds=None, withExpansion=True):
         if not tweetIds:
             raise APIError("Please provide TweetIds")
-        response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion,
-                                          authorInfoWanted=authorInfoWanted)
+        response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion)
         tweets = []
         for tweetDict in response['data']:
             tweet = Tweet.createFromDict(data=tweetDict, pinned=True)

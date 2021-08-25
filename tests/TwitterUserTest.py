@@ -34,9 +34,8 @@ class TwitterUserTest(unittest.TestCase):
         self.addCleanup(self.responses.stop)
         self.addCleanup(self.responses.reset)
 
-    # todo: modify with responses
     @responses.activate
-    def testConstructionHelperMethod(self):
+    def testgetUser(self):
         with open('../testdata/user_without_expansion.json', 'r') as f:
             data = f.read()
             f.close()
@@ -49,7 +48,7 @@ class TwitterUserTest(unittest.TestCase):
         self.assertEqual('30436279', user.id)  # id is a string
         self.assertEqual("Ali Abdaal", user.name)
         self.assertEqual("2009-04-11T11:49:42.000Z", user.created_at)
-        self.assertEqual("👨\u200d⚕️ Doctor, 🧪 YouTuber, 🎙 Podcaster @noverthinking. I teach people how to be Part-Time YouTubers - https://t.co/WNUElMBhFB", user.description)
+        self.assertEqual("👨‍⚕️ Doctor, 🧪 YouTuber, 🎙 Podcaster @noverthinking. I teach people how to be Part-Time YouTubers - https://t.co/WNUElMBhFB", user.description)
         self.assertEqual('https://t.co/dKqFKMFhvC', user.url)
         self.assertEqual('Cambridge, UK', user.location)
         self.assertEqual(5461, user.tweet_count)
@@ -59,6 +58,8 @@ class TwitterUserTest(unittest.TestCase):
         self.assertEqual(False, user.protected)
         self.assertEqual(False, user.verified)
         self.assertEqual(None, user.withheld)
+        self.assertEqual(None, user.start)
+        self.assertEqual(None, user.end)
         self.assertEqual({'url': {'urls': [{'start': 0, 'end': 23, 'url': 'https://t.co/dKqFKMFhvC', 'expanded_url': 'https://www.youtube.com/aliabdaal', 'display_url': 'youtube.com/aliabdaal'}]}, 'description': {'urls': [{'start': 100, 'end': 123, 'url': 'https://t.co/WNUElMBhFB', 'expanded_url': 'http://academy.aliabdaal.com', 'display_url': 'academy.aliabdaal.com'}], 'mentions': [{'start': 37, 'end': 51, 'username': 'noverthinking'}]}}, user.entities)
 
     @responses.activate
