@@ -427,17 +427,13 @@ class TwitterAPI(object):
         response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion)
         tweets = {}
         tweet = Tweet.createFromDict(response['data'])
-        # todo: tweet.referenced_tweets -> somehow solve challenge
-        # via "referenced_tweets" -> tweet_id (includes/expansion) -> author_id (includes/expansion) -> create user instance -> match with tweet
-        # "referenced_tweets": [{"type": "quoted", "id": "1325905401750106113"}]
-        self._prepareMatching(tweet=tweet, tweets=tweets, response=response)
         if 'includes' in response.keys():
+            self._prepareMatching(tweet=tweet, tweets=tweets, response=response)
             self._matchingExpansionObjectsWithTweet(response=response, tweets=tweets)
         return tweet
 
     def getTweets(self, tweetIds=None, withExpansion=True):
         """
-
         :param tweetIds:
         :param withExpansion: get additional information about media, poll, location
         :return: a list of tweets
@@ -447,11 +443,13 @@ class TwitterAPI(object):
         response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion)
         tweetsForMatching = {}  # for matching
         tweets = []
+        expansionWorked = 'includes' in response.keys()
         for tweetDict in response['data']:
             tweet = Tweet.createFromDict(data=tweetDict)
-            self._prepareMatching(tweet=tweet, tweets=tweetsForMatching, response=response)
+            if expansionWorked:
+                self._prepareMatching(tweet=tweet, tweets=tweetsForMatching, response=response)
             tweets.append(tweet)
-        if 'includes' in response.keys():
+        if expansionWorked:
             self._matchingExpansionObjectsWithTweet(response=response, tweets=tweetsForMatching)
         return tweets
 
