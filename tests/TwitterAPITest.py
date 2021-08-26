@@ -260,7 +260,7 @@ class TwitterAPITest(unittest.TestCase):
             data = f.read()
             f.close()
         self.responses.add(GET, url=URL, body=data)
-        tweet = self.api.getTweet(tweetId=1424757354290159621, withExpansion=True)
+        tweet = self.api.getTweet(tweetId=1424757354290159621, withExpansion=False)
         self.assertIsInstance(tweet, twitter.Tweet)
         self.assertEqual("1424757354290159621", tweet.id)
         self.assertEqual("1424757354290159621", tweet.conversation_id)
@@ -322,6 +322,65 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(421, media.height)
         self.assertEqual(749, media.width)
         self.assertEqual("https://pbs.twimg.com/media/E8XA5Q9WUAIXRSe.jpg", media.url)
+
+    @responses.activate
+    def testGetTweets_withoutExpansions(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/tweets_withoutExpansions.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweetIds = [1216144745619165184, 1267631648910139392, 1425855818512011264, 1383112661311778817,
+                    1325907009556852751]
+        tweetsList = self.api.getTweets(tweetIds=tweetIds, withExpansion=False)
+        self.assertEqual("1216144745619165184", tweetsList[0].id)
+        self.assertEqual("1267631648910139392", tweetsList[1].id)
+        self.assertEqual("1425855818512011264", tweetsList[2].id)
+        self.assertEqual("1383112661311778817", tweetsList[3].id)
+        self.assertEqual("1325907009556852751", tweetsList[4].id)
+        self.assertEqual("22151118", tweetsList[0].author_id)
+        self.assertEqual("410409666", tweetsList[1].author_id)
+        self.assertEqual("4625037762", tweetsList[2].author_id)
+        self.assertEqual("490932793", tweetsList[3].author_id)
+        self.assertEqual("335494047", tweetsList[4].author_id)
+        self.assertEqual(324, tweetsList[0].like_count)
+        self.assertEqual(530696, tweetsList[1].like_count)
+        self.assertEqual(132, tweetsList[2].like_count)
+        self.assertEqual(53407, tweetsList[3].like_count)
+        self.assertEqual(570, tweetsList[4].like_count)
+
+    @responses.activate
+    def testGetTweets_withExpansions(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/tweets_withExpansions.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweetIds = [1216144745619165184, 1267631648910139392, 1425855818512011264, 1383112661311778817,
+                    1325907009556852751]
+        tweetsList = self.api.getTweets(tweetIds=tweetIds, withExpansion=True)
+        self.assertEqual("1216144745619165184", tweetsList[0].id)
+        self.assertEqual("1267631648910139392", tweetsList[1].id)
+        self.assertEqual("1425855818512011264", tweetsList[2].id)
+        self.assertEqual("1383112661311778817", tweetsList[3].id)
+        self.assertEqual("1325907009556852751", tweetsList[4].id)
+        self.assertEqual("m_ashcroft", tweetsList[0].users[0].username)
+        self.assertEqual("LoganPaul", tweetsList[1].users[0].username)
+        self.assertEqual("susanthesquark", tweetsList[2].users[0].username)
+        self.assertEqual("MarkRober", tweetsList[3].users[0].username)
+        self.assertEqual("Jopo_dr", tweetsList[4].users[0].username)
+        self.assertEqual(0, len(tweetsList[0].media))
+        self.assertEqual(1, len(tweetsList[1].media))
+        self.assertEqual(1, len(tweetsList[2].media))
+        self.assertEqual(1, len(tweetsList[3].media))
+        self.assertEqual(0, len(tweetsList[4].media))
+        self.assertEqual(0, len(tweetsList[0].poll))  
+        self.assertEqual(0, len(tweetsList[1].poll))
+        self.assertEqual(0, len(tweetsList[2].poll))
+        self.assertEqual(0, len(tweetsList[3].poll))
+        self.assertEqual(0, len(tweetsList[4].poll))
 
 
 if __name__ == '__main__':

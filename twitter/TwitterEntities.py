@@ -163,6 +163,20 @@ class TwitterUser(TwitterEntity):
     def getFriendsCount(self):
         return self.following_count
 
+    def linkWithTweet(self):
+        """
+        if User was part of multiple Tweet request
+        :return:
+        """
+        return self.id
+
+    def saveTweet(self, tweet):
+        """
+        saves the Tweet which the User posted
+        :param tweet: Tweet Object
+        """
+        self.tweets[tweet.id] = tweet
+
 
 class Tweet(TwitterEntity):
     def __init__(self, **kwargs):
@@ -184,8 +198,10 @@ class Tweet(TwitterEntity):
         self.pinned = False
         self.in_reply_to_user_id = None
         self.referenced_tweets = None
+        self.tweets = []  # saving referenced tweet objects
         self.realWorldEntities = []
         self.attachments = None
+        self.users = []
         self.urls = []
         self.media = []
         self.geo = []  # place_id is associated with a place
@@ -203,7 +219,7 @@ class Tweet(TwitterEntity):
             instantiationData['pinned'] = pinned
 
         for (key, value) in data.items():
-            if key not in ['public_metrics', 'entities', 'context_annotations', 'referenced_tweets']:
+            if key not in ['public_metrics', 'entities', 'context_annotations']:
                 if key == "text":
                     transformed_text = utils.encodeDecodeTwitterText(value)
                     instantiationData[key] = transformed_text
@@ -238,6 +254,20 @@ class Tweet(TwitterEntity):
 
         return cls(**instantiationData)
 
+    def linkWithTweet(self):
+        """
+        if tweet was created from referenced tweet, id needed to link with origin tweet
+        :return: id of this instance
+        """
+        return self.id
+
+    def saveTweet(self, tweet):
+        """
+        from referenced tweets
+        :param tweet: a referenced tweet
+        """
+        self.tweets.append(tweet)
+
 
 class Media(TwitterEntity):
     def __init__(self, **kwargs):
@@ -255,6 +285,13 @@ class Media(TwitterEntity):
     @classmethod
     def createFromDict(cls, data):
         return cls(**data)
+
+    def linkWithTweet(self):
+        """
+        if Media was part of multiple Tweet request
+        :return:
+        """
+        return self.media_key
 
     def saveTweet(self, tweet):
         """
@@ -292,6 +329,13 @@ class Poll(TwitterEntity):
             else:
                 instantiationData[key] = value
         return cls(**instantiationData)
+
+    def linkWithTweet(self):
+        """
+        if Poll was part of multiple Tweet request
+        :return:
+        """
+        return self.id
 
     def saveTweet(self, tweet):
         """

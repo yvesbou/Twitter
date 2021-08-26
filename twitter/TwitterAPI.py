@@ -81,8 +81,8 @@ class TwitterAPI(object):
     def _pinnedTweetsToDict(response):
         tweets = {}
         for pinnedTweet in response['includes']['tweets']:  # pinnedTweet is a dict
-            authorId = pinnedTweet['author_id']
-            tweets[authorId] = Tweet.createFromDict(pinnedTweet, pinned=True)  # keys are author id's easy to match
+            author_id = pinnedTweet['author_id']
+            tweets[author_id] = Tweet.createFromDict(pinnedTweet, pinned=True)  # keys are author id's easy to match
         return tweets
 
     @staticmethod
@@ -114,8 +114,8 @@ class TwitterAPI(object):
         :return:
         """
         # loop through pinnedTweets since not every user has pinned tweets
-        for AuthorId, tweet in pinnedTweets.items():
-            user = follows[AuthorId]
+        for author_id, tweet in pinnedTweets.items():
+            user = follows[author_id]
             user.tweets[tweet.id] = tweet
 
     def _matchFollowsWithPlaces(self):
@@ -351,38 +351,108 @@ class TwitterAPI(object):
             raise APIError(response['errors'][0]['message'])
         return response
 
+    @staticmethod
+    def _matchingExpansionObjectsWithTweet(response, tweets):
+        """
+        tweet objects from dictionary tweets are modified by expansion data (response)
+        :param response:
+        :param tweets: dictionary of tweet objects, this tweet objects are modified in this function
+        :return:
+        """
+        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
+        # response['includes'].pop('tweets', None)
+        for key in response['includes'].keys():
+            for twitterEntity in response['includes'][key]:
+                entity = conversionDict[key]
+                twitterEntityInstance = eval(entity).createFromDict(twitterEntity)
+                linkingKey = twitterEntityInstance.linkWithTweet()  # e.g. media_key, pollId, user.id, tweet.id
+                tweet = tweets[linkingKey]  # get tweet in which twitterEntityInstance originated
+                twitterEntityInstance.saveTweet(tweet=tweet)  # save tweet to Entity
+                if not hasattr(tweet, key) or getattr(tweet, key) is None:
+                    setattr(tweet, key,
+                            [])  # if a list of e.g media instances does not exist yet, create list with this instance
+                getattr(tweet, key).append(twitterEntityInstance)
+
+    @staticmethod
+    def _getReferencedTweet(response, tweet):
+        """
+        in matchingExpansionObjectsWithTweet the author_id of linked tweets are needed
+        such that their user instances can be linked with the tweet
+        :param response:
+        :param tweet:
+        :return:
+        """
+        try:
+            refTweet = tweet.referenced_tweets.pop()  # assumption a tweet can only reference one tweet (don't know if that is true)
+        except (IndexError, AttributeError) as error:
+            return None, None
+
+        for tweetFromExpansion in response['includes']['tweets']:
+            if refTweet['id'] == tweetFromExpansion['id']:
+                return tweetFromExpansion['author_id'], refTweet['id']
+
+    def _prepareMatching(self, tweet, tweets, response):
+        """
+        This function creates pairs from objects that exist on Twitter (poll, media, user) to key that can
+        be used to match with tweet after, those other objects are created in self.handleTweetExpansion
+        :param tweet:
+        :param tweets:
+        :return:
+        """
+        # "referenced_tweets": [{"type": "quoted", "id": "1325905401750106113"}]
+        tweetAttachments = tweet.attachments
+        # Tweet get saved in dict with either tweet.id or attachment.id (from media, poll, location or user)
+        tweets[tweet.author_id] = tweet
+        author_id_refTweet, tweet_id_refTweet = self._getReferencedTweet(tweet=tweet, response=response)
+        if author_id_refTweet is not None and tweet_id_refTweet is not None:  # if no referenced tweet, no referenced tweet author_id exists
+            tweets[author_id_refTweet] = tweet
+            tweets[tweet_id_refTweet] = tweet
+        if tweetAttachments is None:  # makes no sense to me
+            tweets[tweet.id] = tweet
+        else:
+            for key, value in tweetAttachments.items():
+                # if a tweet has multiple attachments (multiple media or media and poll) tweet exists multiple times in dict
+                for attachmentKey in value:
+                    tweets[attachmentKey] = tweet
+
     def getTweet(self, tweetId=None, withExpansion=True):
+        """
+
+        :param tweetId:
+        :param withExpansion:
+        :return:
+        """
         if not tweetId:
             raise APIError("Please provide TweetId")
         response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion)
+        tweets = {}
         tweet = Tweet.createFromDict(response['data'])
-        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
+        # todo: tweet.referenced_tweets -> somehow solve challenge
+        # via "referenced_tweets" -> tweet_id (includes/expansion) -> author_id (includes/expansion) -> create user instance -> match with tweet
+        # "referenced_tweets": [{"type": "quoted", "id": "1325905401750106113"}]
+        self._prepareMatching(tweet=tweet, tweets=tweets, response=response)
         if 'includes' in response.keys():
-            response['includes'].pop('users', None)  # we don't want to create a user instance for every tweet
-            for key in response['includes'].keys():
-                for twitterEntity in response['includes'][key]:
-                    entity = conversionDict[key]
-                    twitterEntityInstance = eval(entity).createFromDict(twitterEntity)
-                    twitterEntityInstance.saveTweet(tweet=tweet)
-                    if not hasattr(tweet, key):
-                        setattr(tweet, key, [])  # if a list of e.g media instances does not exist yet, create list with this instance
-                    getattr(tweet, key).append(twitterEntityInstance)
+            self._matchingExpansionObjectsWithTweet(response=response, tweets=tweets)
         return tweet
 
     def getTweets(self, tweetIds=None, withExpansion=True):
+        """
+
+        :param tweetIds:
+        :param withExpansion: get additional information about media, poll, location
+        :return: a list of tweets
+        """
         if not tweetIds:
             raise APIError("Please provide TweetIds")
         response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion)
+        tweetsForMatching = {}  # for matching
         tweets = []
         for tweetDict in response['data']:
-            tweet = Tweet.createFromDict(data=tweetDict, pinned=True)
+            tweet = Tweet.createFromDict(data=tweetDict)
+            self._prepareMatching(tweet=tweet, tweets=tweetsForMatching, response=response)
             tweets.append(tweet)
-        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
         if 'includes' in response.keys():
-            pass
-            # todo: make a request to see how data should be edited
-            # todo: somewhat make poll, place etc objects and match them with their tweet
-            # todo: possible functions: eachObject.createFromDict(), matchTweetWithEachObject, [Media, Place, Poll, User, Tweet]
+            self._matchingExpansionObjectsWithTweet(response=response, tweets=tweetsForMatching)
         return tweets
 
     def getLikedTweetsByUserId(self, userid):
