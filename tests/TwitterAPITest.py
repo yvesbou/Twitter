@@ -68,8 +68,9 @@ class TwitterAPITest(unittest.TestCase):
             f.close()
         self.responses.add(GET, url=URL, body=data)
         users = self.api.getUsers(userNames=['AliAbdaal', 'boutellier_yves', 'michael_saylor'])
-        self.assertEqual(users[1].username, 'boutellier_yves')
-        # todo: write assert for pinnedTweet
+        self.assertEqual('boutellier_yves', users[1].username)
+        pinned_tweet_id = users[0].pinned_tweet_id
+        self.assertIsInstance(users[0].tweets[pinned_tweet_id], twitter.Tweet)
 
     @responses.activate
     def testGetUsers_withExpansion_wMultipleIds(self):
