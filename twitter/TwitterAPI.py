@@ -244,6 +244,24 @@ class TwitterAPI(object):
         response = self._makeRequest(str_input, params)
         return response['data']
 
+    def _extractUsersFromResponse(self, response):
+        users = []
+        for user in response['data']:
+            userInstance = TwitterUser.createFromDict(user)
+            users.append(userInstance)
+        tweets = {}
+        if 'includes' in response.keys():
+            for tweetDict in response['includes']['tweets']:
+                tweet = Tweet.createFromDict(data=tweetDict, pinned=True)
+                tweets[tweet.id] = tweet
+            for user in users:
+                try:
+                    pinnedTweet = tweets[user.pinned_tweet_id]
+                    user.tweets[pinnedTweet.id] = pinnedTweet
+                except KeyError:  # users that don't have a pinned tweet
+                    pass
+        return users
+
     def _getUserResponse(self, userId=None, userName=None, withExpansion=True):
         if not any([userId, userName]):
             raise APIError("Please provide id or Username")
@@ -311,21 +329,7 @@ class TwitterAPI(object):
         :return: list of user instances
         """
         response = self._getUserResponse(userId=userIds, userName=userNames, withExpansion=withExpansion)
-        users = []
-        for user in response['data']:
-            userInstance = TwitterUser.createFromDict(user)
-            users.append(userInstance)
-        tweets = {}
-        if 'includes' in response.keys():
-            for tweetDict in response['includes']['tweets']:
-                tweet = Tweet.createFromDict(data=tweetDict, pinned=True)
-                tweets[tweet.id] = tweet
-            for user in users:
-                try:
-                    pinnedTweet = tweets[user.pinnedTweetId]
-                    user.tweets[pinnedTweet.id] = pinnedTweet
-                except KeyError:  # users that don't have a pinned tweet
-                    pass
+        users = self._extractUsersFromResponse(response=response)
         return users
 
     def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True):
@@ -354,6 +358,7 @@ class TwitterAPI(object):
     @staticmethod
     def _matchingExpansionObjectsWithTweet(response, tweets):
         """
+        helper function for getTweet and getTweets
         tweet objects from dictionary tweets are modified by expansion data (response)
         :param response:
         :param tweets: dictionary of tweet objects, this tweet objects are modified in this function
@@ -376,6 +381,7 @@ class TwitterAPI(object):
     @staticmethod
     def _getReferencedTweet(response, tweet):
         """
+        helper function for getTweet and getTweets
         in matchingExpansionObjectsWithTweet the author_id of linked tweets are needed
         such that their user instances can be linked with the tweet
         :param response:
@@ -393,6 +399,7 @@ class TwitterAPI(object):
 
     def _prepareMatching(self, tweet, tweets, response):
         """
+        helper function for getTweet and getTweets
         This function creates pairs from objects that exist on Twitter (poll, media, user) to key that can
         be used to match with tweet after, those other objects are created in self.handleTweetExpansion
         :param tweet:
@@ -463,3 +470,27 @@ class TwitterAPI(object):
         str_input = f"users/{userid}/liked_tweets"
         response = self._makeRequest(str_input)
         return response
+
+    def getReTweeter(self, tweetId=None, withExpansion=True):
+        """
+        This function returns list of twitter users that retweeted a tweet specified by tweetId
+        :param withExpansion: requests pinnedTweets of the reTweeters and stores them in the user objects
+        :param tweetId:
+        :return:
+        """
+        if not tweetId:
+            raise APIError("Please provide TweetId")
+
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields}
+
+        str_input = f"tweets/{tweetId}/retweeted_by"
+
+        if withExpansion:
+            params["expansions"] = "pinned_tweet_id"
+
+        response = self._makeRequest(str_input, params)
+        if 'errors' in response.keys():
+            raise APIError(response['errors'][0]['message'])
+
+        users = self._extractUsersFromResponse(response=response)
+        return users

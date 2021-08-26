@@ -69,6 +69,7 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         users = self.api.getUsers(userNames=['AliAbdaal', 'boutellier_yves', 'michael_saylor'])
         self.assertEqual(users[1].username, 'boutellier_yves')
+        # todo: write assert for pinnedTweet
 
     @responses.activate
     def testGetUsers_withExpansion_wMultipleIds(self):
@@ -381,6 +382,40 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(0, len(tweetsList[2].poll))
         self.assertEqual(0, len(tweetsList[3].poll))
         self.assertEqual(0, len(tweetsList[4].poll))
+
+    @responses.activate
+    def testRetweet_withoutExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/retweeters_withoutExpansion.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        ids = 1430423837229920258
+        reTweeters = self.api.getReTweeter(tweetId=ids, withExpansion=False)
+        self.assertEqual(10, len(reTweeters))
+        self.assertEqual("Vincent02770108", reTweeters[9].username)
+        self.assertEqual('1382425222494756868', reTweeters[9].id)
+        self.assertEqual({}, reTweeters[9].tweets)
+
+    @responses.activate
+    def testRetweet_withExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/retweeters_withExpansion.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        ids = 1430423837229920258
+        reTweeters = self.api.getReTweeter(tweetId=ids, withExpansion=False)
+        self.assertEqual(10, len(reTweeters))
+        self.assertEqual("HubOfML", reTweeters[0].name)
+        self.assertEqual('3040871649', reTweeters[0].id)
+        pinned_tweet_id = reTweeters[0].pinned_tweet_id
+        self.assertIsInstance(reTweeters[0].tweets[pinned_tweet_id], twitter.Tweet)
+        self.assertEqual(reTweeters[0].id, reTweeters[0].tweets[pinned_tweet_id].author_id)
+
+
 
 
 if __name__ == '__main__':

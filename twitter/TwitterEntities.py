@@ -34,7 +34,7 @@ class TwitterUser(TwitterEntity):
         self.id = None
         self.location = None
         self.name = None
-        self.pinnedTweetId = None  # helps to retrieve pinned tweet object from tweet dict
+        self.pinned_tweet_id = None  # helps to retrieve pinned tweet object from tweet dict
         self.profile_image_url = None
         self.protected = None
         self.followers_count = None
