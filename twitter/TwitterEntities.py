@@ -170,8 +170,9 @@ class TwitterUser(TwitterEntity):
         """
         return self.id
 
-    def saveTweet(self, tweet):
+    def __saveTweet(self, tweet):
         """
+        deprecated: obsolete to store originated tweet since this tweet stores this object
         saves the Tweet which the User posted
         :param tweet: Tweet Object
         """
@@ -201,7 +202,8 @@ class Tweet(TwitterEntity):
         self.tweets = []  # saving referenced tweet objects
         self.realWorldEntities = []
         self.attachments = None
-        self.users = []
+        self.users = []  # todo: maybe discard, conflict between mentions and users, are both needed? mentions is with or without expansion filled,
+        #                   todo: users only if with expansion - is mentions a subset of users?
         self.urls = []
         self.media = []
         self.geo = []  # place_id is associated with a place
@@ -261,8 +263,9 @@ class Tweet(TwitterEntity):
         """
         return self.id
 
-    def saveTweet(self, tweet):
+    def __saveTweet(self, tweet):
         """
+        deprecated: obsolete to store originated tweet since this tweet stores this object
         from referenced tweets
         :param tweet: a referenced tweet
         """
@@ -272,7 +275,6 @@ class Tweet(TwitterEntity):
 class Media(TwitterEntity):
     def __init__(self, **kwargs):
         super().__init__()
-        self.tweet = None
         self.type = None
         self.media_key = None
         self.height = None
@@ -293,8 +295,9 @@ class Media(TwitterEntity):
         """
         return self.media_key
 
-    def saveTweet(self, tweet):
+    def __saveTweet(self, tweet):
         """
+        deprecated: obsolete to store originated tweet since this tweet stores this object
         saves the Tweet to which the Media belongs to
         :param tweet: Tweet Object
         """
@@ -304,7 +307,6 @@ class Media(TwitterEntity):
 class Poll(TwitterEntity):
     def __init__(self, **kwargs):
         super().__init__()
-        self.tweet = None
         self.end_datetime = None
         self.id = None
         self.voting_status = None
@@ -337,8 +339,9 @@ class Poll(TwitterEntity):
         """
         return self.id
 
-    def saveTweet(self, tweet):
+    def __saveTweet(self, tweet):
         """
+        deprecated: obsolete to store originated tweet since this tweet stores this object
         saves the Tweet to which the Poll belongs to
         :param tweet: Tweet Object
         """
@@ -348,13 +351,17 @@ class Poll(TwitterEntity):
 class Place(TwitterEntity):
     def __init__(self):
         super().__init__()
-        self.tweet = None
         self.tweets = []  # maintain a list of all tweets at this location
 
     @classmethod
     def createFromDict(cls, data):
         cls(**data)
 
-    def saveTweet(self, tweet):
+    def __saveTweet(self, tweet):
+        """
+        deprecated: obsolete to store originated tweet since this tweet stores this object
+        saves the Tweet to which the Place belongs to
+        :param tweet: Tweet Object
+        """
         self.tweet = tweet
         self.tweets.append(tweet)  # maintain a list of all tweets at this location

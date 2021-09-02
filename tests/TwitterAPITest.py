@@ -300,7 +300,6 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         tweet = self.api.getTweet(tweetId=1199786642468413448, withExpansion=True)
         poll = tweet.polls[0]
-        self.assertEqual(tweet, poll.tweet)
         self.assertEqual("2019-11-28T20:26:41.000Z", poll.end_datetime)
         self.assertEqual("1199786642468413448", poll.id)
         self.assertEqual("closed", poll.voting_status)
@@ -318,7 +317,6 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         tweet = self.api.getTweet(tweetId=1424757354290159621, withExpansion=True)
         media = tweet.media[0]
-        self.assertEqual(tweet, media.tweet)
         self.assertEqual("photo", media.type)
         self.assertEqual("3_1424756947169988610", media.media_key)
         self.assertEqual(421, media.height)
@@ -335,22 +333,22 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         tweetIds = [1216144745619165184, 1267631648910139392, 1425855818512011264, 1383112661311778817,
                     1325907009556852751]
-        tweetsList = self.api.getTweets(tweetIds=tweetIds, withExpansion=False)
-        self.assertEqual("1216144745619165184", tweetsList[0].id)
-        self.assertEqual("1267631648910139392", tweetsList[1].id)
-        self.assertEqual("1425855818512011264", tweetsList[2].id)
-        self.assertEqual("1383112661311778817", tweetsList[3].id)
-        self.assertEqual("1325907009556852751", tweetsList[4].id)
-        self.assertEqual("22151118", tweetsList[0].author_id)
-        self.assertEqual("410409666", tweetsList[1].author_id)
-        self.assertEqual("4625037762", tweetsList[2].author_id)
-        self.assertEqual("490932793", tweetsList[3].author_id)
-        self.assertEqual("335494047", tweetsList[4].author_id)
-        self.assertEqual(324, tweetsList[0].like_count)
-        self.assertEqual(530696, tweetsList[1].like_count)
-        self.assertEqual(132, tweetsList[2].like_count)
-        self.assertEqual(53407, tweetsList[3].like_count)
-        self.assertEqual(570, tweetsList[4].like_count)
+        tweetDict = self.api.getTweets(tweetIds=tweetIds, withExpansion=False)
+        self.assertEqual("1216144745619165184", tweetDict["1216144745619165184"].id)
+        self.assertEqual("1267631648910139392", tweetDict["1267631648910139392"].id)
+        self.assertEqual("1425855818512011264", tweetDict["1425855818512011264"].id)
+        self.assertEqual("1383112661311778817", tweetDict["1383112661311778817"].id)
+        self.assertEqual("1325907009556852751", tweetDict["1325907009556852751"].id)
+        self.assertEqual("22151118", tweetDict["1216144745619165184"].author_id)
+        self.assertEqual("410409666", tweetDict["1267631648910139392"].author_id)
+        self.assertEqual("4625037762", tweetDict["1425855818512011264"].author_id)
+        self.assertEqual("490932793", tweetDict["1383112661311778817"].author_id)
+        self.assertEqual("335494047", tweetDict["1325907009556852751"].author_id)
+        self.assertEqual(324, tweetDict["1216144745619165184"].like_count)
+        self.assertEqual(530696, tweetDict["1267631648910139392"].like_count)
+        self.assertEqual(132, tweetDict["1425855818512011264"].like_count)
+        self.assertEqual(53407, tweetDict["1383112661311778817"].like_count)
+        self.assertEqual(570, tweetDict["1325907009556852751"].like_count)
 
     @responses.activate
     def testGetTweets_withExpansions(self):
@@ -362,27 +360,27 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         tweetIds = [1216144745619165184, 1267631648910139392, 1425855818512011264, 1383112661311778817,
                     1325907009556852751]
-        tweetsList = self.api.getTweets(tweetIds=tweetIds, withExpansion=True)
-        self.assertEqual("1216144745619165184", tweetsList[0].id)
-        self.assertEqual("1267631648910139392", tweetsList[1].id)
-        self.assertEqual("1425855818512011264", tweetsList[2].id)
-        self.assertEqual("1383112661311778817", tweetsList[3].id)
-        self.assertEqual("1325907009556852751", tweetsList[4].id)
-        self.assertEqual("m_ashcroft", tweetsList[0].users[0].username)
-        self.assertEqual("LoganPaul", tweetsList[1].users[0].username)
-        self.assertEqual("susanthesquark", tweetsList[2].users[0].username)
-        self.assertEqual("MarkRober", tweetsList[3].users[0].username)
-        self.assertEqual("Jopo_dr", tweetsList[4].users[0].username)
-        self.assertEqual(0, len(tweetsList[0].media))
-        self.assertEqual(1, len(tweetsList[1].media))
-        self.assertEqual(1, len(tweetsList[2].media))
-        self.assertEqual(1, len(tweetsList[3].media))
-        self.assertEqual(0, len(tweetsList[4].media))
-        self.assertEqual(0, len(tweetsList[0].poll))  
-        self.assertEqual(0, len(tweetsList[1].poll))
-        self.assertEqual(0, len(tweetsList[2].poll))
-        self.assertEqual(0, len(tweetsList[3].poll))
-        self.assertEqual(0, len(tweetsList[4].poll))
+        tweets_dict = self.api.getTweets(tweetIds=tweetIds, withExpansion=True)
+        self.assertEqual("1216144745619165184", tweets_dict["1216144745619165184"].id)
+        self.assertEqual("1267631648910139392", tweets_dict["1267631648910139392"].id)
+        self.assertEqual("1425855818512011264", tweets_dict["1425855818512011264"].id)
+        self.assertEqual("1383112661311778817", tweets_dict["1383112661311778817"].id)
+        self.assertEqual("1325907009556852751", tweets_dict["1325907009556852751"].id)
+        self.assertEqual("m_ashcroft", tweets_dict["1216144745619165184"].users[0].username)
+        self.assertEqual("LoganPaul", tweets_dict["1267631648910139392"].users[0].username)
+        self.assertEqual("susanthesquark", tweets_dict["1425855818512011264"].users[0].username)
+        self.assertEqual("MarkRober", tweets_dict["1383112661311778817"].users[0].username)
+        self.assertEqual("Jopo_dr", tweets_dict["1325907009556852751"].users[0].username)
+        self.assertEqual(0, len(tweets_dict["1216144745619165184"].media))
+        self.assertEqual(1, len(tweets_dict["1267631648910139392"].media))
+        self.assertEqual(1, len(tweets_dict["1425855818512011264"].media))
+        self.assertEqual(1, len(tweets_dict["1383112661311778817"].media))
+        self.assertEqual(0, len(tweets_dict["1325907009556852751"].media))
+        self.assertEqual(0, len(tweets_dict["1216144745619165184"].poll))
+        self.assertEqual(0, len(tweets_dict["1267631648910139392"].poll))
+        self.assertEqual(0, len(tweets_dict["1425855818512011264"].poll))
+        self.assertEqual(0, len(tweets_dict["1383112661311778817"].poll))
+        self.assertEqual(0, len(tweets_dict["1325907009556852751"].poll))
 
     @responses.activate
     def testRetweet_withoutExpansion(self):
@@ -416,7 +414,68 @@ class TwitterAPITest(unittest.TestCase):
         self.assertIsInstance(reTweeters[0].tweets[pinned_tweet_id], twitter.Tweet)
         self.assertEqual(reTweeters[0].id, reTweeters[0].tweets[pinned_tweet_id].author_id)
 
+    @responses.activate
+    def testGetUserTweetTimeline_1page_withoutExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_without_expansion_1page.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        UserId = "1380593146971762690"
+        tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=False)
+        self.assertEqual(10, len(list(tweets.values())))
+        self.assertEqual(UserId, tweets['1430424109238951936'].author_id)
 
+    @responses.activate
+    def testGetUserTweetTimeline_1page_withExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_with_expansion_1page.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        UserId = "1380593146971762690"
+        tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=True)
+        self.assertEqual(11, len(list(tweets.values())))
+        self.assertEqual(1, len(tweets['1430819811362328576'].tweets))
+        self.assertEqual(4, len(tweets['1430819811362328576'].users))
+        self.assertEqual(1, len(tweets['1430424109238951936'].tweets))
+        self.assertEqual(2, len(tweets['1430424109238951936'].users))
+        self.assertEqual(0, len(tweets['1430423837229920258'].tweets))
+        self.assertEqual(2, len(tweets['1430423837229920258'].users))
+        self.assertEqual(1, len(tweets['1430025060367179781'].tweets))
+        self.assertEqual(2, len(tweets['1430025060367179781'].users))
+        self.assertEqual(1, len(tweets['1429716490115293187'].tweets))
+        self.assertEqual(4, len(tweets['1429716490115293187'].users))
+        self.assertEqual(0, len(tweets['1428446953290047488'].tweets))
+        self.assertEqual(1, len(tweets['1428446953290047488'].users))
+        self.assertEqual(0, len(tweets['1427912617344049157'].tweets))
+        self.assertEqual(1, len(tweets['1427912617344049157'].users))
+        self.assertEqual(0, len(tweets['1425679832701091841'].tweets))
+        self.assertEqual(1, len(tweets['1425679832701091841'].users))
+        self.assertEqual(0, len(tweets['1405102751831531524'].tweets))
+        self.assertEqual(2, len(tweets['1405102751831531524'].users))
+        self.assertEqual(0, len(tweets['1388830469194719236'].tweets))
+        self.assertEqual(2, len(tweets['1388830469194719236'].users))
+        self.assertEqual(0, len(tweets['1388776765200424962'].tweets))
+        self.assertEqual(1, len(tweets['1388776765200424962'].users))
+
+    def testGetUserTimeLine_2pages(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_with_expansion_morePages_1_2.json', 'r') as f:
+            data_1st_page = f.read()
+            f.close()
+        with open('../testdata/user_time_line_with_expansion_morePages_2_2.json', 'r') as f:
+            data_2nd_page = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data_1st_page)
+        self.responses.add(GET, url=URL, body=data_2nd_page)
+        tweets = self.api.getUserTweetTimeline(userId="30436279", withExpansion=True)
+        self.assertEqual(200, len(list(tweets.values())))
+        self.assertEqual(1, len(tweets['1413921348615819275'].tweets))
+        self.assertEqual(1, len(tweets['1413921348615819275'].users))
 
 
 if __name__ == '__main__':

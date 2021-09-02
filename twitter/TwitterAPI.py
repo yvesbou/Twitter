@@ -3,6 +3,7 @@ import math
 import time
 
 from twitter.TwitterEntities import TwitterUser, Tweet, Poll, Place, Media
+import twitter.utils as utils
 
 from twitter.Error import APIError
 
@@ -124,7 +125,7 @@ class TwitterAPI(object):
         # maybe with getTweet, but then it would be called _matchTweetWithPlaces
 
     @staticmethod
-    def limit(user, numPages=None, percentagePages=None, follower=False):
+    def limit_follows(user, numPages=None, percentagePages=None, follower=False):
         """
         This function is active on an interim basis
         :return:
@@ -161,9 +162,9 @@ class TwitterAPI(object):
         :param numPages:
         :param withExpansion: get pinned tweets of followers
         :param user: user instance from that followers should be obtained
-        :return: list of followers from user that was specified by input
+        :return: dictionary of followers from user that was specified by input
         """
-        iterations = self.limit(user=user, numPages=numPages, percentagePages=percentagePages, follower=True)
+        iterations = self.limit_follows(user=user, numPages=numPages, percentagePages=percentagePages, follower=True)
 
         response = self._getFollowersResponse(user=user, withExpansion=withExpansion,
                                               entriesPerPage=entriesPerPage)
@@ -205,7 +206,7 @@ class TwitterAPI(object):
         :param user: user instance from that friends should be obtained
         :return: list of friends from user that was specified by input
         """
-        iterations = self.limit(user=user, numPages=numPages, percentagePages=percentagePages, follower=False)
+        iterations = self.limit_follows(user=user, numPages=numPages, percentagePages=percentagePages, follower=False)
 
         response = self._getFriendsResponse(user=user, withExpansion=withExpansion,
                                             entriesPerPage=entriesPerPage)
@@ -244,7 +245,8 @@ class TwitterAPI(object):
         response = self._makeRequest(str_input, params)
         return response['data']
 
-    def _extractUsersFromResponse(self, response):
+    @staticmethod
+    def _extractUsersFromResponse(response):
         users = []
         for user in response['data']:
             userInstance = TwitterUser.createFromDict(user)
@@ -356,88 +358,68 @@ class TwitterAPI(object):
         return response
 
     @staticmethod
-    def _matchingExpansionObjectsWithTweet(response, tweets):
-        """
-        helper function for getTweet and getTweets
-        tweet objects from dictionary tweets are modified by expansion data (response)
-        :param response:
-        :param tweets: dictionary of tweet objects, this tweet objects are modified in this function
-        :return:
-        """
-        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
-        # response['includes'].pop('tweets', None)
-        for key in response['includes'].keys():
-            for twitterEntity in response['includes'][key]:
-                entity = conversionDict[key]
-                twitterEntityInstance = eval(entity).createFromDict(twitterEntity)
-                linkingKey = twitterEntityInstance.linkWithTweet()  # e.g. media_key, pollId, user.id, tweet.id
-                tweet = tweets[linkingKey]  # get tweet in which twitterEntityInstance originated
-                twitterEntityInstance.saveTweet(tweet=tweet)  # save tweet to Entity
-                if not hasattr(tweet, key) or getattr(tweet, key) is None:
-                    setattr(tweet, key,
-                            [])  # if a list of e.g media instances does not exist yet, create list with this instance
-                getattr(tweet, key).append(twitterEntityInstance)
-
-    @staticmethod
-    def _getReferencedTweet(response, tweet):
+    def _getLinkage(tweet):
         """
         helper function for getTweet and getTweets
         in matchingExpansionObjectsWithTweet the author_id of linked tweets are needed
         such that their user instances can be linked with the tweet
-        :param response:
+        :param links:
         :param tweet:
         :return:
         """
+
+        # "attachments": {"media_keys": ["7_1427157481478832130"]}
+        # "referenced_tweets": [{"type": "replied_to", "id": "1426125234378264576"}]
+        # "attachments": {"poll_ids": ["1199786642468413448"]}
+
+        links = [tweet.author_id]  # for getTweets the expansion includes the author object, for UserTimeLine as well
+
+        for user in tweet.mentions:
+            links.append(user.id)
+
         try:
-            refTweet = tweet.referenced_tweets.pop()  # assumption a tweet can only reference one tweet (don't know if that is true)
-        except (IndexError, AttributeError) as error:
-            return None, None
+            refTweet_id = tweet.referenced_tweets[0]['id']
+            # refTweet_type = tweet.referenced_tweets[0]['type']
+            links.append(refTweet_id)
+        except (IndexError, AttributeError, TypeError) as error:
+            pass
 
-        for tweetFromExpansion in response['includes']['tweets']:
-            if refTweet['id'] == tweetFromExpansion['id']:
-                return tweetFromExpansion['author_id'], refTweet['id']
+        try:
+            for key, value in tweet.attachments.items():
+                if key == "media_keys":
+                    media_key = value[0]
+                    links.append(media_key)
+                if key == "poll_ids":
+                    poll_id = value[0]
+                    links.append(poll_id)
+        except (IndexError, AttributeError, TypeError) as error:
+            pass
 
-    def _prepareMatching(self, tweet, tweets, response):
-        """
-        helper function for getTweet and getTweets
-        This function creates pairs from objects that exist on Twitter (poll, media, user) to key that can
-        be used to match with tweet after, those other objects are created in self.handleTweetExpansion
-        :param tweet:
-        :param tweets:
-        :return:
-        """
-        # "referenced_tweets": [{"type": "quoted", "id": "1325905401750106113"}]
-        tweetAttachments = tweet.attachments
-        # Tweet get saved in dict with either tweet.id or attachment.id (from media, poll, location or user)
-        tweets[tweet.author_id] = tweet
-        author_id_refTweet, tweet_id_refTweet = self._getReferencedTweet(tweet=tweet, response=response)
-        if author_id_refTweet is not None and tweet_id_refTweet is not None:  # if no referenced tweet, no referenced tweet author_id exists
-            tweets[author_id_refTweet] = tweet
-            tweets[tweet_id_refTweet] = tweet
-        if tweetAttachments is None:  # makes no sense to me
-            tweets[tweet.id] = tweet
-        else:
-            for key, value in tweetAttachments.items():
-                # if a tweet has multiple attachments (multiple media or media and poll) tweet exists multiple times in dict
-                for attachmentKey in value:
-                    tweets[attachmentKey] = tweet
+        return links
 
     def getTweet(self, tweetId=None, withExpansion=True):
         """
 
         :param tweetId:
         :param withExpansion:
-        :return:
+        :return: a Tweet object
         """
         if not tweetId:
             raise APIError("Please provide TweetId")
+
         response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion)
-        tweets = {}
-        tweet = Tweet.createFromDict(response['data'])
-        if 'includes' in response.keys():
-            self._prepareMatching(tweet=tweet, tweets=tweets, response=response)
-            self._matchingExpansionObjectsWithTweet(response=response, tweets=tweets)
-        return tweet
+
+        tweets_Output = {}
+
+        if withExpansion:
+            ExpansionObjects = self._createExpansionObjects(response=response)
+            tweet = Tweet.createFromDict(response['data'])
+            self._matchExpansionWithTweet(tweet=tweet, ExpansionObjects=ExpansionObjects, tweets_Output=tweets_Output)
+        else:
+            tweet = Tweet.createFromDict(response['data'])
+            tweets_Output[tweet.id] = tweet
+
+        return tweets_Output[tweet.id]
 
     def getTweets(self, tweetIds=None, withExpansion=True):
         """
@@ -448,17 +430,9 @@ class TwitterAPI(object):
         if not tweetIds:
             raise APIError("Please provide TweetIds")
         response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion)
-        tweetsForMatching = {}  # for matching
-        tweets = []
-        expansionWorked = 'includes' in response.keys()
-        for tweetDict in response['data']:
-            tweet = Tweet.createFromDict(data=tweetDict)
-            if expansionWorked:
-                self._prepareMatching(tweet=tweet, tweets=tweetsForMatching, response=response)
-            tweets.append(tweet)
-        if expansionWorked:
-            self._matchingExpansionObjectsWithTweet(response=response, tweets=tweetsForMatching)
-        return tweets
+        tweets_Output = {}
+        self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
+        return tweets_Output
 
     def getLikedTweetsByUserId(self, userid):
         """
@@ -494,3 +468,102 @@ class TwitterAPI(object):
 
         users = self._extractUsersFromResponse(response=response)
         return users
+
+    def _getUserTimeLineResponse(self, str_input, params):
+        response = self._makeRequest(str_input, params)
+        if 'errors' in response.keys():
+            raise APIError(response['errors'][0]['message'])
+        return response
+
+    @staticmethod
+    def _createExpansionObjects(response):
+        ExpansionObjects = {}
+        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
+        for key in response['includes'].keys():
+            for twitterEntity in response['includes'][key]:  # users, media, geo, polls, tweets
+                entity = conversionDict[key]
+                twitterEntityInstance = eval(entity).createFromDict(twitterEntity)
+                linkingKey = twitterEntityInstance.linkWithTweet()
+                ExpansionObjects[linkingKey] = (twitterEntityInstance, key)
+        return ExpansionObjects
+
+    def _matchExpansionWithTweet(self, tweet, ExpansionObjects, tweets_Output):
+        links = self._getLinkage(tweet=tweet)
+        for link in links:
+            expansionObject, key = ExpansionObjects[link]
+            if not hasattr(tweet, key) or getattr(tweet, key) is None:
+                setattr(tweet, key,
+                        [])  # if a list of e.g media instances does not exist yet, create list with this instance
+            getattr(tweet, key).append(expansionObject)
+        tweets_Output[tweet.id] = tweet
+
+    def _handleMultipleTweetResponse(self, response, tweets_Output, withExpansion):
+        if withExpansion:
+            ExpansionObjects = self._createExpansionObjects(response=response)
+            for tweetDict in response['data']:
+                tweet = Tweet.createFromDict(data=tweetDict)
+                self._matchExpansionWithTweet(tweet=tweet, ExpansionObjects=ExpansionObjects, tweets_Output=tweets_Output)
+        else:
+            for tweetDict in response['data']:
+                tweet = Tweet.createFromDict(data=tweetDict)
+                tweets_Output[tweet.id] = tweet
+
+    def getUserTweetTimeline(self, userId=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
+        """
+        Only the 3200 most recent Tweets are available, ie. max 32 requests per user
+        Returns Tweets composed by a single user, specified by the requested user ID.
+        By default, the most recent ten Tweets are returned per request.
+        Using pagination, the most recent 3,200 Tweets can be retrieved.
+        :param: start_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
+        :param: end_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
+        :return: dictionary key = tweet_id
+        """
+        if not userId:
+            raise APIError("Please provide UserId")
+
+        iterations = int(3200/entriesPerPage)
+
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields, "max_results": f"{entriesPerPage}"}
+
+        if not excludeRetweet and not excludeReplies:
+            params['exclude'] = ['retweets,replies']
+        elif not excludeRetweet and excludeReplies:
+            params['exclude'] = 'replies'
+        elif excludeRetweet and not excludeReplies:
+            params['exclude'] = 'retweets'
+
+        if since_id:
+            params['since_id'] = since_id
+        if until_id:
+            params['until_id'] = until_id
+        if start_time:
+            if utils.datetime_valid(start_time):
+                params['start_time'] = start_time
+            # else raise sth?
+        if end_time:
+            if utils.datetime_valid(end_time):
+                params['end_time'] = end_time
+            # else raise sth?
+
+        str_input = f"users/{userId}/tweets"
+        if withExpansion:
+            params["expansions"] = [
+                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+
+        tweets_Output = {}
+
+        response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+        self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
+
+        for i in range(0, iterations-1):
+            if 'next_token' in response['meta'].keys():
+                token = response['meta']['next_token']
+                params['pagination_token'] = token
+                response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+                self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
+            else:
+                break
+
+        return tweets_Output
+
