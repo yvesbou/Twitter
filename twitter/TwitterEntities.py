@@ -217,6 +217,9 @@ class Tweet(TwitterEntity):
     def createFromDict(cls, data, pinned=False):
         instantiationData = {}
         realWorldEntities = []
+        tweetType = "Tweet"
+        tweetTypes = {"Tweet": "Tweet", "replied_to": "TweetReply", "retweeted": "Retweet", "quoted": "QuotedRetweet"}
+
         if pinned:
             instantiationData['pinned'] = pinned
 
@@ -225,6 +228,8 @@ class Tweet(TwitterEntity):
                 if key == "text":
                     transformed_text = utils.encodeDecodeTwitterText(value)
                     instantiationData[key] = transformed_text
+                elif key == "referenced_tweets":
+                    tweetType = tweetTypes[value[0]['type']]
                 else:
                     instantiationData[key] = value
 
@@ -254,7 +259,7 @@ class Tweet(TwitterEntity):
                                 setattr(rwEntity, rwKey, rwValues)
                             instantiationData['realWorldEntities'].append(rwEntity)
 
-        return cls(**instantiationData)
+        return eval(tweetType)(**instantiationData)
 
     def linkWithTweet(self):
         """
@@ -270,6 +275,21 @@ class Tweet(TwitterEntity):
         :param tweet: a referenced tweet
         """
         self.tweets.append(tweet)
+
+
+class Retweet(Tweet):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class TweetReply(Tweet):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class QuotedRetweet(Tweet):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class Media(TwitterEntity):
