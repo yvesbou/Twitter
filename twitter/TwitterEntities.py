@@ -63,7 +63,7 @@ class TwitterUser(TwitterEntity):
         attributes = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
         return str(attributes)
 
-    def createUsersFromFriends(self, data):
+    def __createUsersFromFriends(self, data):
         """
         deprecated!
         takes a whole list of user data in json format and returns a list of twitter-user instances
@@ -80,7 +80,7 @@ class TwitterUser(TwitterEntity):
         self.friends.extend(output)
         return output
 
-    def createUsersFromFollowers(self, data):
+    def __createUsersFromFollowers(self, data):
         """
         deprecated!
         :param data:
