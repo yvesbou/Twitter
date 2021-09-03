@@ -230,6 +230,7 @@ class Tweet(TwitterEntity):
                     instantiationData[key] = transformed_text
                 elif key == "referenced_tweets":
                     tweetType = tweetTypes[value[0]['type']]
+                    instantiationData[key] = value
                 else:
                     instantiationData[key] = value
 
