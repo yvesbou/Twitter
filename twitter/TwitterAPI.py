@@ -385,6 +385,12 @@ class TwitterAPI(object):
             pass
 
         try:
+            place_id = tweet.geo['place_id']
+            links.append(place_id)
+        except (AttributeError, IndexError, KeyError) as error:
+            pass
+
+        try:
             for key, value in tweet.attachments.items():
                 if key == "media_keys":
                     media_key = value[0]
@@ -478,7 +484,7 @@ class TwitterAPI(object):
     @staticmethod
     def _createExpansionObjects(response):
         ExpansionObjects = {}
-        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'geo': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
+        conversionDict = {'users': 'TwitterUser', 'media': 'Media', 'places': 'Place', 'polls': 'Poll', 'tweets': 'Tweet'}
         for key in response['includes'].keys():
             for twitterEntity in response['includes'][key]:  # users, media, geo, polls, tweets
                 entity = conversionDict[key]
@@ -508,23 +514,28 @@ class TwitterAPI(object):
                 tweet = Tweet.createFromDict(data=tweetDict)
                 tweets_Output[tweet.id] = tweet
 
-    def getUserTweetTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
-        """
-        Only the 3200 most recent Tweets are available, ie. max 32 requests per user
-        Returns Tweets composed by a single user, specified by the requested user ID.
-        By default, the most recent ten Tweets are returned per request.
-        Using pagination, the most recent 3,200 Tweets can be retrieved.
-        :param: start_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
-        :param: end_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
-        :return: dictionary key = tweet_id
-        """
-        if not userId and not userName:
-            raise APIError("Please provide userId or userName")
+    def _handleTimeLineResponse(self, str_input, tweets_Output, withExpansion, iterations, params):
+        response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+        self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
 
-        iterations = int(3200/entriesPerPage)
+        for i in range(0, iterations - 1):
+            if 'next_token' in response['meta'].keys():
+                token = response['meta']['next_token']
+                params['pagination_token'] = token
+                response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+                self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output,
+                                                  withExpansion=withExpansion)
+            else:
+                break
 
+    def _prepareParamsTimeline(self, withExpansion, entriesPerPage, excludeRetweet, excludeReplies, since_id, until_id, start_time, end_time):
         params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
-                  "place.fields": self._placeFields, "poll.fields": self._pollFields, "max_results": f"{entriesPerPage}"}
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields,
+                  "max_results": f"{entriesPerPage}"}
+
+        if withExpansion:
+            params["expansions"] = [
+                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
 
         if not excludeRetweet and not excludeReplies:
             params['exclude'] = ['retweets,replies']
@@ -546,28 +557,69 @@ class TwitterAPI(object):
                 params['end_time'] = end_time
             # else raise sth?
 
+        return params
+
+    def getUserTweetTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
+        """
+        Only the 3200 most recent Tweets are available, ie. max 32 requests per user
+        Returns Tweets composed by a single user, specified by the requested user ID.
+        By default, the most recent ten Tweets are returned per request.
+        Using pagination, the most recent 3,200 Tweets can be retrieved.
+        :param: start_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
+        :param: end_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
+        :return: dictionary key = tweet_id
+        """
+        if not userId and not userName:
+            raise APIError("Please provide userId or userName")
+
+        iterations = int(3200/entriesPerPage)
+
         if userId:
             str_input = f"users/{userId}/tweets"
         else:
             str_input = f"users/by/username/{userName}/tweets"
 
-        if withExpansion:
-            params["expansions"] = [
-                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+        params = self._prepareParamsTimeline(withExpansion=withExpansion, entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet, excludeReplies=excludeReplies, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
 
         tweets_Output = {}
 
-        response = self._getUserTimeLineResponse(str_input=str_input, params=params)
-        self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
-
-        for i in range(0, iterations-1):
-            if 'next_token' in response['meta'].keys():
-                token = response['meta']['next_token']
-                params['pagination_token'] = token
-                response = self._getUserTimeLineResponse(str_input=str_input, params=params)
-                self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
-            else:
-                break
+        self._handleTimeLineResponse(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
 
         return tweets_Output
 
+    def getUserMentionTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
+        """
+        Returns Tweets mentioning a single user specified by the requested user ID.
+        By default, the most recent ten Tweets are returned per request.
+        Using pagination, up to the most recent 800 Tweets can be retrieved.
+        Rate Limit: - App rate limit: 450 requests per 15-minute window
+                    - User rate limit: 180 requests per 15-minute window
+        :param start_time:
+        :param end_time:
+        :param until_id:
+        :param since_id:
+        :param excludeReplies:
+        :param excludeRetweet:
+        :param entriesPerPage:
+        :param userId:
+        :param userName:
+        :param withExpansion:
+        :return:
+        """
+        if not userId and not userName:
+            raise APIError("Please provide userId or userName")
+
+        iterations = int(800 / entriesPerPage)
+
+        if userId:
+            str_input = f"users/{userId}/mentions"
+        else:
+            str_input = f"users/by/username/{userName}/mentions"
+
+        params = self._prepareParamsTimeline(withExpansion=withExpansion, entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet, excludeReplies=excludeReplies, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
+
+        tweets_Output = {}
+
+        self._handleTimeLineResponse(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
+
+        return tweets_Output

@@ -206,7 +206,7 @@ class Tweet(TwitterEntity):
         #                   todo: users only if with expansion - is mentions a subset of users?
         self.urls = []
         self.media = []
-        self.geo = []  # place_id is associated with a place
+        self.geo = {}  # place_id is associated with a place
         self.poll = []
         self.hashtags = []
         self.mentions = []  # mentioned in tweet, not author itself
@@ -370,19 +370,22 @@ class Poll(TwitterEntity):
 
 
 class Place(TwitterEntity):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.tweets = []  # maintain a list of all tweets at this location
+
+        for (param, attribute) in kwargs.items():
+            setattr(self, param, attribute)
 
     @classmethod
     def createFromDict(cls, data):
-        cls(**data)
+        return cls(**data)
 
-    def __saveTweet(self, tweet):
+    def linkWithTweet(self):
         """
-        deprecated: obsolete to store originated tweet since this tweet stores this object
-        saves the Tweet to which the Place belongs to
-        :param tweet: Tweet Object
+        if Poll was part of multiple Tweet request
+        :return:
         """
-        self.tweet = tweet
-        self.tweets.append(tweet)  # maintain a list of all tweets at this location
+        try:
+            return self.id
+        except AttributeError:
+            return None

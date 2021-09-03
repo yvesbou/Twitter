@@ -477,6 +477,48 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(1, len(tweets['1413921348615819275'].tweets))
         self.assertEqual(1, len(tweets['1413921348615819275'].users))
 
+    def testGetUserMentionTimeline_1page_withoutExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_mentions_without_expansions.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        UserId = "1380593146971762690"
+        textTweet = "TDataScience: RT @boutellier_yves: Are you total new to #git and #github ? This tutorial I wrote for @TDataScience  might be something for you. https://t.co/2WxLWcXCen"
+        tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=False)
+        self.assertEqual(10, len(list(tweets.values())))
+        self.assertEqual(textTweet, tweets['1433697478554046466'].text)
+
+    def testGetUserMentionTimeline_1page_withExpansion(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_mentions_with_expansions.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        UserId = "1380593146971762690"
+        tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=True)
+        self.assertEqual(10, len(list(tweets.values())))
+        self.assertEqual('MesumRazaHemani', tweets['1433697478554046466'].users[0].username)
+        self.assertEqual(3, len(tweets['1433697478554046466'].users))
+
+    def testGetUserMentionTimeLine_2pages(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/user_time_line_mentions_with_expansions_morePages_1_2.json', 'r') as f:
+            data_1st_page = f.read()
+            f.close()
+        with open('../testdata/user_time_line_mentions_with_expansions_morePages_2_2.json', 'r') as f:
+            data_2nd_page = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data_1st_page)
+        self.responses.add(GET, url=URL, body=data_2nd_page)
+        UserId = "30436279"
+        tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=True)
+        self.assertEqual(200, len(list(tweets.values())))
+        self.assertEqual(3, len(tweets['1433734878735052815'].users))
+
 
 if __name__ == '__main__':
     unittest.main()
