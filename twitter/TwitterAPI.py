@@ -508,7 +508,7 @@ class TwitterAPI(object):
                 tweet = Tweet.createFromDict(data=tweetDict)
                 tweets_Output[tweet.id] = tweet
 
-    def getUserTweetTimeline(self, userId=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
+    def getUserTweetTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
         """
         Only the 3200 most recent Tweets are available, ie. max 32 requests per user
         Returns Tweets composed by a single user, specified by the requested user ID.
@@ -518,8 +518,8 @@ class TwitterAPI(object):
         :param: end_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
         :return: dictionary key = tweet_id
         """
-        if not userId:
-            raise APIError("Please provide UserId")
+        if not userId and not userName:
+            raise APIError("Please provide userId or userName")
 
         iterations = int(3200/entriesPerPage)
 
@@ -546,7 +546,11 @@ class TwitterAPI(object):
                 params['end_time'] = end_time
             # else raise sth?
 
-        str_input = f"users/{userId}/tweets"
+        if userId:
+            str_input = f"users/{userId}/tweets"
+        else:
+            str_input = f"users/by/username/{userName}/tweets"
+
         if withExpansion:
             params["expansions"] = [
                 "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
