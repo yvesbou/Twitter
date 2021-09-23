@@ -1,6 +1,10 @@
 import requests
 import math
+import json
 import time
+
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 
 from twitter.TwitterEntities import TwitterUser, Tweet, Poll, Place, Media
 import twitter.utils as utils
@@ -42,6 +46,16 @@ class TwitterAPI(object):
                                 headers=self._bearerOauth(self.__bearer_token), params=params)
         return response.json()
 
+    def _getResponse(self, str_input, params):
+        response = self._makeRequest(str_input, params)
+        self._checkError(response=response)
+        return response
+
+    @staticmethod
+    def _checkError(response):
+        if 'errors' in response.keys() and 'data' not in response.keys():  # errors is always a key for pinned tweets that were not found
+            raise APIError(response['errors'][0]['message'])
+
     def _createParamsFollows(self, firstPage=True, token=None, withExpansion=None,
                              entriesPerPage=1000):
         params = {"user.fields": self._userFields, "max_results": f"{entriesPerPage}",
@@ -55,18 +69,12 @@ class TwitterAPI(object):
 
         return params
 
-    @staticmethod
-    def _checkError(response):
-        if 'errors' in response.keys() and 'data' not in response.keys():  # errors is always a key for pinned tweets that were not found
-            raise APIError(response['errors'][0]['message'])
-
     def _getFollowersResponse(self, user, firstPage=True, token=None, withExpansion=None,
                               entriesPerPage=1000):
         str_input = "users/" + str(user.id) + "/" + "followers"
         params = self._createParamsFollows(firstPage=firstPage, token=token, withExpansion=withExpansion,
                                            entriesPerPage=entriesPerPage)
-        response = self._makeRequest(str_input, params)
-        self._checkError(response)
+        response = self._getResponse(str_input=str_input, params=params)
         return response
 
     def _getFriendsResponse(self, user, firstPage=True, token=None, withExpansion=None,
@@ -74,8 +82,7 @@ class TwitterAPI(object):
         str_input = "users/" + str(user.id) + "/" + "following"
         params = self._createParamsFollows(firstPage=firstPage, token=token, withExpansion=withExpansion,
                                            entriesPerPage=entriesPerPage)
-        response = self._makeRequest(str_input, params)
-        self._checkError(response)
+        response = self._getResponse(str_input=str_input, params=params)
         return response
 
     @staticmethod
@@ -278,9 +285,7 @@ class TwitterAPI(object):
 
         if withExpansion:
             params["expansions"] = "pinned_tweet_id"
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
+        response = self._getResponse(str_input=str_input, params=params)
 
         return response
 
@@ -299,9 +304,8 @@ class TwitterAPI(object):
 
         if withExpansion:
             params["expansions"] = "pinned_tweet_id"
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
+
+        response = self._getResponse(str_input=str_input, params=params)
 
         return response
 
@@ -352,9 +356,7 @@ class TwitterAPI(object):
         if withExpansion:
             params["expansions"] = [
                     "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
+        response = self._getResponse(str_input=str_input, params=params)
         return response
 
     @staticmethod
@@ -468,18 +470,10 @@ class TwitterAPI(object):
         if withExpansion:
             params["expansions"] = "pinned_tweet_id"
 
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
+        response = self._getResponse(str_input=str_input, params=params)
 
         users = self._extractUsersFromResponse(response=response)
         return users
-
-    def _getUserTimeLineResponse(self, str_input, params):
-        response = self._makeRequest(str_input, params)
-        if 'errors' in response.keys():
-            raise APIError(response['errors'][0]['message'])
-        return response
 
     @staticmethod
     def _createExpansionObjects(response):
@@ -503,6 +497,17 @@ class TwitterAPI(object):
             getattr(tweet, key).append(expansionObject)
         tweets_Output[tweet.id] = tweet
 
+    def _handleTweetResponse(self, response, tweets_Output, withExpansion):
+        if withExpansion:
+            ExpansionObjects = self._createExpansionObjects(response=response)
+            tweetDict = response['data']
+            tweet = Tweet.createFromDict(data=tweetDict)
+            self._matchExpansionWithTweet(tweet=tweet, ExpansionObjects=ExpansionObjects, tweets_Output=tweets_Output)
+        else:
+            tweetDict = response['data']
+            tweet = Tweet.createFromDict(data=tweetDict)
+            tweets_Output[tweet.id] = tweet
+
     def _handleMultipleTweetResponse(self, response, tweets_Output, withExpansion):
         if withExpansion:
             ExpansionObjects = self._createExpansionObjects(response=response)
@@ -515,14 +520,14 @@ class TwitterAPI(object):
                 tweets_Output[tweet.id] = tweet
 
     def _handleTimeLineResponse(self, str_input, tweets_Output, withExpansion, iterations, params):
-        response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+        response = self._getResponse(str_input=str_input, params=params)
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
 
         for i in range(0, iterations - 1):
             if 'next_token' in response['meta'].keys():
                 token = response['meta']['next_token']
                 params['pagination_token'] = token
-                response = self._getUserTimeLineResponse(str_input=str_input, params=params)
+                response = self._getResponse(str_input=str_input, params=params)
                 self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output,
                                                   withExpansion=withExpansion)
             else:
@@ -623,3 +628,164 @@ class TwitterAPI(object):
         self._handleTimeLineResponse(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
 
         return tweets_Output
+
+    def getTweetsFromStream(self, withExpansion=True, secondsActive=600, timeout=10):
+        """
+        Streams Tweets in real-time based on a specific set of filter rules.
+        App rate limit: 50 requests per 15-minute window
+        :return:
+        """
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields}
+
+        if withExpansion:
+            params["expansions"] = [
+                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+
+        str_input = "https://api.twitter.com/2/tweets/search/stream"
+        tweets_Output = {}
+
+        start = time.time()
+        while True:
+            duration = time.time() - start
+            if duration > secondsActive:
+                return tweets_Output
+            try:
+                resp = requests.get(str_input, headers=self._bearerOauth(self.__bearer_token), params=params, stream=True, timeout=timeout)
+                if resp.status_code == 200:
+                    for line in resp.iter_lines():
+                        try:
+                            responseAsDict = json.loads(line)
+                            self._handleTweetResponse(responseAsDict, tweets_Output, withExpansion)
+                        except json.decoder.JSONDecodeError as e:  # if an empty byte response occurs, no problem, continue
+                            continue
+                elif resp.status_code == 429:
+                    print("Too many reconnects.")
+                    duration = time.time() - start
+                    TimeLeft = secondsActive - duration
+                    if 0 > TimeLeft:
+                        return tweets_Output
+                    elif 0 < TimeLeft < 60:
+                        return tweets_Output
+                    else:
+                        time.sleep(10)
+                        continue
+                else:
+                    print("Unhandled status `{}` retreived, exiting.".format(resp.status_code))
+                    return tweets_Output
+            except requests.exceptions.Timeout:
+                pass  # we'll ignore timeout errors and reconnect
+            except requests.exceptions.RequestException as e:
+                print("Request exception `{}`, exiting".format(e))
+                pass
+
+    def getTweetsFromStreamWithThreading(self, withExpansion=True, secondsActive=600, timeout=10):
+        """
+        probably slower than without threading
+        Streams Tweets in real-time based on a specific set of filter rules.
+        App rate limit: 50 requests per 15-minute window
+        :return:
+        """
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields}
+
+        if withExpansion:
+            params["expansions"] = [
+                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+
+        str_input = "https://api.twitter.com/2/tweets/search/stream"
+        tweets_Output = {}
+
+        start = time.time()
+        while True:
+            duration = time.time() - start
+            if duration > secondsActive:
+                return tweets_Output
+            try:
+                resp = requests.get(str_input, headers=self._bearerOauth(self.__bearer_token), params=params, stream=True, timeout=timeout)
+                if resp.status_code == 200:
+                    with ThreadPoolExecutor() as executor:
+                        for line in resp.iter_lines():
+                            try:
+                                responseAsDict = json.loads(line)
+                                executor.submit(self._handleTweetResponse, responseAsDict, tweets_Output, withExpansion)
+                            except json.decoder.JSONDecodeError as e:  # if an empty byte response occurs, no problem, continue
+                                continue
+                elif resp.status_code == 429:
+                    print("Too many reconnects.")
+                    duration = time.time() - start
+                    TimeLeft = secondsActive - duration
+                    if 0 > TimeLeft:
+                        return tweets_Output
+                    elif 0 < TimeLeft < 60:
+                        return tweets_Output
+                    else:
+                        time.sleep(10)
+                        continue
+                else:
+                    print("Unhandled status `{}` retreived, exiting.".format(resp.status_code))
+                    return tweets_Output
+            except requests.exceptions.Timeout:
+                pass  # we'll ignore timeout errors and reconnect
+            except requests.exceptions.RequestException as e:
+                print("Request exception `{}`, exiting".format(e))
+                pass
+
+    def addRulesForStream(self, rule, ruleName):
+        if type(rule) is not str or type(ruleName) is not str:
+            raise Exception("Rule and ruleName must be strings")
+
+        sample_rules = [{"value": rule, "tag": ruleName}]
+
+        payload = {"add": sample_rules}
+
+        response = requests.post(
+            "https://api.twitter.com/2/tweets/search/stream/rules",
+            headers=self._bearerOauth(self.__bearer_token),
+            json=payload)
+
+        # response looks like:
+        # {"data": [{"value": "Bonstetten has:images", "tag": "Bonstetten pictures", "id": "1434860809906184200"}],
+        # "meta": {"sent": "2021-09-06T12:47:31.023Z", "summary": {"created": 1, "not_created": 0, "valid": 1, "invalid": 0}}}
+
+        return response.json()
+
+    def deleteRulesForStream(self, ids):
+        payload = {"delete": {"ids": ids}}
+        response = requests.post(
+            "https://api.twitter.com/2/tweets/search/stream/rules",
+            headers=self._bearerOauth(self.__bearer_token),
+            json=payload)
+        return response.json()
+
+    def getRulesForStream(self):
+        response = requests.get("https://api.twitter.com/2/tweets/search/stream/rules", headers=self._bearerOauth(self.__bearer_token))
+        # response looks like:
+        # {"data": [{"id": "1434859870008791047", "value": "dog has:images", "tag": "dog pictures"},
+        # {"id": "1434859870008791048", "value": "cat has:images -grumpy", "tag": "cat pictures"},
+        # {"id": "1434860372478111750", "value": "Zurich has:images", "tag": "zurich pictures"},
+        # {"id": "1434860672077139971", "value": "Winterthur has:images", "tag": "Winterthur pictures"},
+        # {"id": "1434860809906184200", "value": "Bonstetten has:images", "tag": "Bonstetten pictures"}],
+        # "meta": {"sent": "2021-09-06T12:58:53.598Z"}}
+        return response.json()
+
+    def deleteAllRulesForStream(self, rules):
+        if rules is None or "data" not in rules:
+            return None
+
+        ids = list(map(lambda rule: rule["id"], rules["data"]))
+        payload = {"delete": {"ids": ids}}
+        response = requests.post(
+            "https://api.twitter.com/2/tweets/search/stream/rules",
+            headers=self._bearerOauth(self.__bearer_token),
+            json=payload)
+
+        # response looks like:
+        # {"meta": {"sent": "2021-09-06T13:30:48.950Z", "summary": {"deleted": 5, "not_deleted": 0}}}
+
+        return response.json()
+
+
+
+
+

@@ -2,7 +2,7 @@ import twitter
 
 import unittest
 import responses
-from responses import GET
+from responses import GET, POST
 
 import json
 import re
@@ -282,7 +282,7 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(None, tweet.referenced_tweets)
         self.assertEqual([], tweet.realWorldEntities)
         self.assertEqual([{"start": 47, "end": 70, "url": "https://t.co/bSR19MNh6s", "expanded_url": "https://www.indiehackers.com/newsletter", "display_url": "indiehackers.com/newsletter", "status": 200, "unwound_url": "https://www.indiehackers.com/newsletter"}, {"start": 246, "end": 269, "url": "https://t.co/ANfyyZY2Jx", "expanded_url": "https://twitter.com/IndieHackers/status/1424757354290159621/photo/1", "display_url": "pic.twitter.com/ANfyyZY2Jx"}], tweet.urls)
-        self.assertEqual([], tweet.geo)  # place_id is associated with a place
+        self.assertEqual({}, tweet.geo)  # place_id is associated with a place
         self.assertEqual([], tweet.poll)
         self.assertEqual([{"start": 113, "end": 126, "tag": "indiehackers"}], tweet.hashtags)
         self.assertEqual('756326958946922496', tweet.mentions[0].id)
@@ -518,6 +518,52 @@ class TwitterAPITest(unittest.TestCase):
         tweets = self.api.getUserTweetTimeline(userId=UserId, withExpansion=True)
         self.assertEqual(200, len(list(tweets.values())))
         self.assertEqual(3, len(tweets['1433734878735052815'].users))
+
+    def testGetTweetStream(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/Tweet_stream_2.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweetsFromStream = self.api.getTweetsFromStream(withExpansion=True, secondsActive=20, timeout=5)
+        self.assertEqual(1, len(tweetsFromStream))
+
+    def testGetRulesForTweetStream(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/AppliedRules.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        rules = self.api.getRulesForStream()
+        self.assertEqual(1, rules['meta']['result_count'])
+        self.assertEqual('Elon Musk', rules['data'][0]['value'])
+
+    def testDeleteAllRulesForTweetStream(self):
+        with open('../testdata/ExampleRules.json', 'r') as f:
+            rules = json.load(f)
+            f.close()
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/DeleteAllRulesConfirmation.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(POST, url=URL, body=data)
+        confirmation = self.api.deleteAllRulesForStream(rules=rules)
+        self.assertEqual(5, confirmation['meta']['summary']['deleted'])
+
+    def testAddRulesForTweetStream(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/AddedRules.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(POST, url=URL, body=data)
+        confirmation = self.api.addRulesForStream(rule="Zurich has:images", ruleName="Zurich pictures")
+
+        self.assertEqual("Zurich has:images", confirmation['data'][0]['value'])
+        self.assertEqual("Zurich pictures", confirmation['data'][0]['tag'])
 
 
 if __name__ == '__main__':
