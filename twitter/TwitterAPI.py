@@ -490,7 +490,11 @@ class TwitterAPI(object):
     def _matchExpansionWithTweet(self, tweet, ExpansionObjects, tweets_Output):
         links = self._getLinkage(tweet=tweet)
         for link in links:
-            expansionObject, key = ExpansionObjects[link]
+            try:
+                expansionObject, key = ExpansionObjects[link]
+            except KeyError:
+                # only some tweets miss include information, idk the reason for that, maybe imprecision of Twitter API
+                pass
             if not hasattr(tweet, key) or getattr(tweet, key) is None:
                 setattr(tweet, key,
                         [])  # if a list of e.g media instances does not exist yet, create list with this instance
@@ -629,10 +633,13 @@ class TwitterAPI(object):
 
         return tweets_Output
 
-    def getTweetsFromStream(self, withExpansion=True, secondsActive=600, timeout=10):
+    def _streamer(self, str_input, withExpansion, secondsActive, timeout):
         """
-        Streams Tweets in real-time based on a specific set of filter rules.
-        App rate limit: 50 requests per 15-minute window
+        Provides streaming logic and processing for filtered and sample stream
+        :param str_input:
+        :param withExpansion:
+        :param secondsActive:
+        :param timeout:
         :return:
         """
         params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
@@ -642,21 +649,21 @@ class TwitterAPI(object):
             params["expansions"] = [
                 "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
 
-        str_input = "https://api.twitter.com/2/tweets/search/stream"
         tweets_Output = {}
 
         start = time.time()
         while True:
-            duration = time.time() - start
-            if duration > secondsActive:
-                return tweets_Output
             try:
-                resp = requests.get(str_input, headers=self._bearerOauth(self.__bearer_token), params=params, stream=True, timeout=timeout)
+                resp = requests.get(str_input, headers=self._bearerOauth(self.__bearer_token), params=params,
+                                    stream=True, timeout=timeout)
                 if resp.status_code == 200:
                     for line in resp.iter_lines():
                         try:
                             responseAsDict = json.loads(line)
                             self._handleTweetResponse(responseAsDict, tweets_Output, withExpansion)
+                            duration = time.time() - start
+                            if duration > secondsActive:
+                                return tweets_Output
                         except json.decoder.JSONDecodeError as e:  # if an empty byte response occurs, no problem, continue
                             continue
                 elif resp.status_code == 429:
@@ -671,13 +678,24 @@ class TwitterAPI(object):
                         time.sleep(10)
                         continue
                 else:
-                    print("Unhandled status `{}` retreived, exiting.".format(resp.status_code))
+                    print("Unhandled status `{}` retrieved, exiting.".format(resp.status_code))
                     return tweets_Output
             except requests.exceptions.Timeout:
                 pass  # we'll ignore timeout errors and reconnect
             except requests.exceptions.RequestException as e:
                 print("Request exception `{}`, exiting".format(e))
                 pass
+
+    def getTweetsFromFilteredStream(self, withExpansion=True, secondsActive=600, timeout=10):
+        """
+        Streams Tweets in real-time based on a specific set of filter rules.
+        App rate limit: 50 requests per 15-minute window
+        :return:
+        """
+
+        str_input = "https://api.twitter.com/2/tweets/search/stream"
+
+        return self._streamer(str_input=str_input, withExpansion=withExpansion, secondsActive=secondsActive, timeout=timeout)
 
     def getTweetsFromStreamWithThreading(self, withExpansion=True, secondsActive=600, timeout=10):
         """
@@ -723,7 +741,7 @@ class TwitterAPI(object):
                         time.sleep(10)
                         continue
                 else:
-                    print("Unhandled status `{}` retreived, exiting.".format(resp.status_code))
+                    print("Unhandled status `{}` retrieved, exiting.".format(resp.status_code))
                     return tweets_Output
             except requests.exceptions.Timeout:
                 pass  # we'll ignore timeout errors and reconnect
@@ -731,7 +749,13 @@ class TwitterAPI(object):
                 print("Request exception `{}`, exiting".format(e))
                 pass
 
-    def addRulesForStream(self, rule, ruleName):
+    def addRulesForFilteredStream(self, rule, ruleName):
+        """
+        Let's you add rules that are applied for filtered Tweet streaming
+        :param rule: a string of what you want to stream
+        :param ruleName: a string
+        :return: confirmation data as a dictionary provided by the Twitter API
+        """
         if type(rule) is not str or type(ruleName) is not str:
             raise Exception("Rule and ruleName must be strings")
 
@@ -744,13 +768,14 @@ class TwitterAPI(object):
             headers=self._bearerOauth(self.__bearer_token),
             json=payload)
 
-        # response looks like:
-        # {"data": [{"value": "Bonstetten has:images", "tag": "Bonstetten pictures", "id": "1434860809906184200"}],
-        # "meta": {"sent": "2021-09-06T12:47:31.023Z", "summary": {"created": 1, "not_created": 0, "valid": 1, "invalid": 0}}}
-
         return response.json()
 
-    def deleteRulesForStream(self, ids):
+    def deleteRulesForFilteredStream(self, ids):
+        """
+        delete rule by specifying the id or multiple ids
+        :param ids: a list of ids in string format
+        :return: dictionary with confirmation data provided by the Twitter API
+        """
         payload = {"delete": {"ids": ids}}
         response = requests.post(
             "https://api.twitter.com/2/tweets/search/stream/rules",
@@ -758,18 +783,21 @@ class TwitterAPI(object):
             json=payload)
         return response.json()
 
-    def getRulesForStream(self):
+    def getRulesForFilteredStream(self):
+        """
+        A function that provides you with the rules that are currently applied for the filtered stream
+        :return: dictionary with all rules currently applied for the filtered stream
+        """
         response = requests.get("https://api.twitter.com/2/tweets/search/stream/rules", headers=self._bearerOauth(self.__bearer_token))
-        # response looks like:
-        # {"data": [{"id": "1434859870008791047", "value": "dog has:images", "tag": "dog pictures"},
-        # {"id": "1434859870008791048", "value": "cat has:images -grumpy", "tag": "cat pictures"},
-        # {"id": "1434860372478111750", "value": "Zurich has:images", "tag": "zurich pictures"},
-        # {"id": "1434860672077139971", "value": "Winterthur has:images", "tag": "Winterthur pictures"},
-        # {"id": "1434860809906184200", "value": "Bonstetten has:images", "tag": "Bonstetten pictures"}],
-        # "meta": {"sent": "2021-09-06T12:58:53.598Z"}}
         return response.json()
 
-    def deleteAllRulesForStream(self, rules):
+    def deleteAllRulesForFilteredStream(self):
+        """
+        A function that let's you delete all your rules
+        :return: confirmation in dictionary format of the json response by the Twitter API
+        """
+        rules = self.getRulesForFilteredStream()
+
         if rules is None or "data" not in rules:
             return None
 
@@ -780,10 +808,24 @@ class TwitterAPI(object):
             headers=self._bearerOauth(self.__bearer_token),
             json=payload)
 
-        # response looks like:
-        # {"meta": {"sent": "2021-09-06T13:30:48.950Z", "summary": {"deleted": 5, "not_deleted": 0}}}
-
         return response.json()
+
+    def getTweetsFromSampleStream(self, withExpansion=True, secondsActive=600, timeout=10):
+        """
+        Streams about 1% of all Tweets in real-time.
+        App rate limit: 50 requests per 15-minute window
+
+        :param withExpansion:
+        :param secondsActive:
+        :param timeout:
+        :return:
+        """
+
+        str_input = "https://api.twitter.com/2/tweets/sample/stream"
+
+        return self._streamer(str_input=str_input, withExpansion=withExpansion, secondsActive=secondsActive,
+                              timeout=timeout)
+
 
 
 

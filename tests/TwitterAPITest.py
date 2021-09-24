@@ -522,11 +522,11 @@ class TwitterAPITest(unittest.TestCase):
     def testGetTweetStream(self):
         self.responses = responses.RequestsMock()
         self.responses.start()
-        with open('../testdata/Tweet_stream_2.json', 'r') as f:
+        with open('../testdata/FilterStream.json', 'r') as f:
             data = f.read()
             f.close()
         self.responses.add(GET, url=URL, body=data)
-        tweetsFromStream = self.api.getTweetsFromStream(withExpansion=True, secondsActive=20, timeout=5)
+        tweetsFromStream = self.api.getTweetsFromFilteredStream(withExpansion=True, secondsActive=20, timeout=5)
         self.assertEqual(1, len(tweetsFromStream))
 
     def testGetRulesForTweetStream(self):
@@ -536,21 +536,24 @@ class TwitterAPITest(unittest.TestCase):
             data = f.read()
             f.close()
         self.responses.add(GET, url=URL, body=data)
-        rules = self.api.getRulesForStream()
+        rules = self.api.getRulesForFilteredStream()
         self.assertEqual(1, rules['meta']['result_count'])
         self.assertEqual('Elon Musk', rules['data'][0]['value'])
 
     def testDeleteAllRulesForTweetStream(self):
-        with open('../testdata/ExampleRules.json', 'r') as f:
-            rules = json.load(f)
-            f.close()
+
         self.responses = responses.RequestsMock()
         self.responses.start()
+        with open('../testdata/ExampleRules.json', 'r') as f:
+            rules = f.read()
+            f.close()
         with open('../testdata/DeleteAllRulesConfirmation.json', 'r') as f:
             data = f.read()
             f.close()
+
+        self.responses.add(GET, url=URL, body=rules)
         self.responses.add(POST, url=URL, body=data)
-        confirmation = self.api.deleteAllRulesForStream(rules=rules)
+        confirmation = self.api.deleteAllRulesForFilteredStream()
         self.assertEqual(5, confirmation['meta']['summary']['deleted'])
 
     def testAddRulesForTweetStream(self):
@@ -560,7 +563,7 @@ class TwitterAPITest(unittest.TestCase):
             data = f.read()
             f.close()
         self.responses.add(POST, url=URL, body=data)
-        confirmation = self.api.addRulesForStream(rule="Zurich has:images", ruleName="Zurich pictures")
+        confirmation = self.api.addRulesForFilteredStream(rule="Zurich has:images", ruleName="Zurich pictures")
 
         self.assertEqual("Zurich has:images", confirmation['data'][0]['value'])
         self.assertEqual("Zurich pictures", confirmation['data'][0]['tag'])
