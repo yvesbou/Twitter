@@ -519,7 +519,7 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(200, len(list(tweets.values())))
         self.assertEqual(3, len(tweets['1433734878735052815'].users))
 
-    def testGetTweetStream(self):
+    def testGetFilteredStream(self):
         self.responses = responses.RequestsMock()
         self.responses.start()
         with open('../testdata/FilterStream.json', 'r') as f:
@@ -567,6 +567,16 @@ class TwitterAPITest(unittest.TestCase):
 
         self.assertEqual("Zurich has:images", confirmation['data'][0]['value'])
         self.assertEqual("Zurich pictures", confirmation['data'][0]['tag'])
+
+    def testGetSampleStream(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/SampleStream.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        tweetsFromStream = self.api.getTweetsFromSampleStream(withExpansion=True, secondsActive=20, timeout=5)
+        self.assertEqual(1, len(tweetsFromStream))
 
 
 if __name__ == '__main__':

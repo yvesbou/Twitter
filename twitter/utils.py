@@ -8,7 +8,13 @@ from datetime import datetime
 
 
 def encodeDecodeTwitterText(twitterText):
-    return twitterText.encode('utf-16', 'surrogatepass').decode('utf-16')
+    """
+    used in create TweetFromDict, UserFromDict, PollFromDict
+    :param twitterText:
+    :return:
+    """
+    return twitterText.encode('utf-16', 'surrogatepass').decode('utf-16').encode('utf-8').decode('utf-8')
+
 
 
 def datetime_valid(dt_str):

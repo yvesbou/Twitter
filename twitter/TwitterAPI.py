@@ -419,15 +419,9 @@ class TwitterAPI(object):
 
         tweets_Output = {}
 
-        if withExpansion:
-            ExpansionObjects = self._createExpansionObjects(response=response)
-            tweet = Tweet.createFromDict(response['data'])
-            self._matchExpansionWithTweet(tweet=tweet, ExpansionObjects=ExpansionObjects, tweets_Output=tweets_Output)
-        else:
-            tweet = Tweet.createFromDict(response['data'])
-            tweets_Output[tweet.id] = tweet
+        self._handleTweetResponse(response, tweets_Output, withExpansion)
 
-        return tweets_Output[tweet.id]
+        return list(tweets_Output.values())[0]
 
     def getTweets(self, tweetIds=None, withExpansion=True):
         """
@@ -664,7 +658,7 @@ class TwitterAPI(object):
                             duration = time.time() - start
                             if duration > secondsActive:
                                 return tweets_Output
-                        except json.decoder.JSONDecodeError as e:  # if an empty byte response occurs, no problem, continue
+                        except json.decoder.JSONDecodeError as error:  # if an empty byte response occurs, no problem, continue
                             continue
                 elif resp.status_code == 429:
                     print("Too many reconnects.")
@@ -727,7 +721,7 @@ class TwitterAPI(object):
                             try:
                                 responseAsDict = json.loads(line)
                                 executor.submit(self._handleTweetResponse, responseAsDict, tweets_Output, withExpansion)
-                            except json.decoder.JSONDecodeError as e:  # if an empty byte response occurs, no problem, continue
+                            except json.decoder.JSONDecodeError as error:  # if an empty byte response occurs, no problem, continue
                                 continue
                 elif resp.status_code == 429:
                     print("Too many reconnects.")
