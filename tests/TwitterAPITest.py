@@ -586,9 +586,20 @@ class TwitterAPITest(unittest.TestCase):
             f.close()
         self.responses.add(GET, url=URL, body=data)
         rule = '(from:AliAbdaal -is:retweet) OR #aliabdaal'
-        tweets = self.api.getTweetsFromRecentSearch(searchQuery=rule, withExpansion=True)
+        tweets = self.api.getRecentTweetsFromSearch(searchQuery=rule, withExpansion=True)
         self.assertEqual(10, len(tweets))
         self.assertEqual(2, len(tweets['1442154739924234241'].mentions))
+
+    def testGetRecentTweetCountsFromSearch(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/TweetCounts.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        rule = '(from:elonmusk -is:retweet)'
+        counts = self.api.getRecentTweetCountsFromSearch(searchQuery=rule)
+        self.assertEqual(46, counts['meta']['total_tweet_count'])
 
 
 if __name__ == '__main__':

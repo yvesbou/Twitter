@@ -38,7 +38,7 @@ class TwitterAPI(object):
         carries out the actual request via API endpoint of twitter API v2 early release and the library requests
         :param url_param: specified by the function that carries out the request e.g. get_followers: id + "/" + "following"
         :param params: not mandatory, can be used to specify the response with more detailed information about certain aspects
-        :return: result of request
+        :return: result of request as a dictionary
         """
         if not params:
             params = ""
@@ -436,7 +436,7 @@ class TwitterAPI(object):
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
         return tweets_Output
 
-    def getTweetsFromRecentSearch(self, searchQuery, withExpansion, entriesPerPage=100, since_id=None, until_id=None, start_time=None, end_time=None):
+    def getRecentTweetsFromSearch(self, searchQuery, withExpansion, entriesPerPage=100, since_id=None, until_id=None, start_time=None, end_time=None):
         """
         App rate limit: 450 requests per 15-minute window
         User rate limit: 180 requests per 15-minute window
@@ -476,6 +476,28 @@ class TwitterAPI(object):
                                                             iterations=iterations, params=params)
 
         return tweets_Output
+
+    def getRecentTweetCountsFromSearch(self, searchQuery, granularity='hour', since_id=None, until_id=None, start_time=None, end_time=None):
+        """
+        The recent Tweet counts endpoint returns count of Tweets from the last seven days that match a search query.
+
+        App rate limit: 300 requests per 15-minute window
+
+        :param searchQuery:
+        :param granularity: granularity the counting is grouped either minute, hour, day
+        :param since_id:
+        :param until_id:
+        :param start_time:
+        :param end_time:
+        :return: dictionary from response
+        """
+        params = {"query": searchQuery, "granularity": granularity}
+        self._timeFrameHandler(params=params, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
+        str_input = "tweets/counts/recent"
+
+        response = self._getResponse(str_input=str_input, params=params)
+
+        return response
 
     def getLikedTweetsByUserId(self, userid):
         """
