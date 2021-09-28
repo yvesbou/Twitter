@@ -578,6 +578,18 @@ class TwitterAPITest(unittest.TestCase):
         tweetsFromStream = self.api.getTweetsFromSampleStream(withExpansion=True, secondsActive=20, timeout=5)
         self.assertEqual(1, len(tweetsFromStream))
 
+    def testGetTweetsFromRecentSearch(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/SearchTweets.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        rule = '(from:AliAbdaal -is:retweet) OR #aliabdaal'
+        tweets = self.api.getTweetsFromRecentSearch(searchQuery=rule, withExpansion=True)
+        self.assertEqual(10, len(tweets))
+        self.assertEqual(2, len(tweets['1442154739924234241'].mentions))
+
 
 if __name__ == '__main__':
     unittest.main()

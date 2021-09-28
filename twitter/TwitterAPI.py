@@ -436,6 +436,47 @@ class TwitterAPI(object):
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
         return tweets_Output
 
+    def getTweetsFromRecentSearch(self, searchQuery, withExpansion, entriesPerPage=100, since_id=None, until_id=None, start_time=None, end_time=None):
+        """
+        App rate limit: 450 requests per 15-minute window
+        User rate limit: 180 requests per 15-minute window
+
+        The recent search endpoint returns Tweets from the last seven days (by default) that match a search query.
+        For example: params = {'query': '(from:twitterdev -is:retweet) OR #twitterdev'}
+        To find out how to build rules check out:
+        https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/integrate/build-a-rule
+
+        The Tweets returned by this endpoint count towards the Project-level Tweet cap.
+        :param entriesPerPage: possible range from 10 to 100
+        :param end_time:
+        :param start_time:
+        :param until_id:
+        :param since_id:
+        :param searchQuery: a string that says which tweets should be included in the output
+        :param withExpansion:
+        :return:
+        """
+        params = {"query": searchQuery, "tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields, "max_results": f"{entriesPerPage}"}
+        str_input = "tweets/search/recent"
+
+        if withExpansion:
+            params["expansions"] = [
+                "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+
+        # By default, a request will return Tweets from up to seven days ago if you do not one of since/until id, start/end time.
+        self._timeFrameHandler(params=params, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
+
+        tweets_Output = {}
+
+        # app rate limit
+        iterations = 180
+
+        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion,
+                                                            iterations=iterations, params=params)
+
+        return tweets_Output
+
     def getLikedTweetsByUserId(self, userid):
         """
         !deprecated
@@ -517,7 +558,7 @@ class TwitterAPI(object):
                 tweet = Tweet.createFromDict(data=tweetDict)
                 tweets_Output[tweet.id] = tweet
 
-    def _handleTimeLineResponse(self, str_input, tweets_Output, withExpansion, iterations, params):
+    def _creatingTweetObjectsFromMultipleResponsePages(self, str_input, tweets_Output, withExpansion, iterations, params):
         response = self._getResponse(str_input=str_input, params=params)
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
 
@@ -530,6 +571,21 @@ class TwitterAPI(object):
                                                   withExpansion=withExpansion)
             else:
                 break
+
+    @staticmethod
+    def _timeFrameHandler(params, since_id, until_id, start_time, end_time):
+        if since_id:
+            params['since_id'] = since_id
+        if until_id:
+            params['until_id'] = until_id
+        if start_time:
+            if utils.datetime_valid(start_time):
+                params['start_time'] = start_time
+            # else raise sth?
+        if end_time:
+            if utils.datetime_valid(end_time):
+                params['end_time'] = end_time
+            # else raise sth?
 
     def _prepareParamsTimeline(self, withExpansion, entriesPerPage, excludeRetweet, excludeReplies, since_id, until_id, start_time, end_time):
         params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
@@ -547,18 +603,8 @@ class TwitterAPI(object):
         elif excludeRetweet and not excludeReplies:
             params['exclude'] = 'retweets'
 
-        if since_id:
-            params['since_id'] = since_id
-        if until_id:
-            params['until_id'] = until_id
-        if start_time:
-            if utils.datetime_valid(start_time):
-                params['start_time'] = start_time
-            # else raise sth?
-        if end_time:
-            if utils.datetime_valid(end_time):
-                params['end_time'] = end_time
-            # else raise sth?
+        self._timeFrameHandler(params=params, since_id=since_id, until_id=until_id, start_time=start_time,
+                               end_time=end_time)
 
         return params
 
@@ -586,7 +632,7 @@ class TwitterAPI(object):
 
         tweets_Output = {}
 
-        self._handleTimeLineResponse(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
+        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
 
         return tweets_Output
 
@@ -623,7 +669,7 @@ class TwitterAPI(object):
 
         tweets_Output = {}
 
-        self._handleTimeLineResponse(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
+        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
 
         return tweets_Output
 
