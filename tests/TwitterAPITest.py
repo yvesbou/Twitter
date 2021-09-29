@@ -601,6 +601,18 @@ class TwitterAPITest(unittest.TestCase):
         counts = self.api.getRecentTweetCountsFromSearch(searchQuery=rule)
         self.assertEqual(46, counts['meta']['total_tweet_count'])
 
+    def testGetLikingUsersOfTweet(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/LikingUsersOfTweet.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        likingUsers = self.api.getLikingUsersOfTweet(tweetId="1277648326570192896", withExpansion=True)
+        self.assertEqual(52, len(likingUsers))
+        self.assertEqual("Together Making The Greatest Future", likingUsers[0].description)
+        self.assertEqual("736816434152513538", likingUsers[3].tweets["1354485777497874433"].author_id)
+
 
 if __name__ == '__main__':
     unittest.main()

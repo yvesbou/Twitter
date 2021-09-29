@@ -254,21 +254,26 @@ class TwitterAPI(object):
 
     @staticmethod
     def _extractUsersFromResponse(response):
+        """
+        This method is used by getReTweeters and getUsers to obtain user and if requested their pinned tweets.
+        For getLikingUsersOfTweet another function is used as there are more expansions allowed to the pinned tweet
+        :param response:
+        :return:
+        """
         users = []
-        for user in response['data']:
-            userInstance = TwitterUser.createFromDict(user)
-            users.append(userInstance)
         tweets = {}
         if 'includes' in response.keys():
             for tweetDict in response['includes']['tweets']:
                 tweet = Tweet.createFromDict(data=tweetDict, pinned=True)
                 tweets[tweet.id] = tweet
-            for user in users:
-                try:
-                    pinnedTweet = tweets[user.pinned_tweet_id]
-                    user.tweets[pinnedTweet.id] = pinnedTweet
-                except KeyError:  # users that don't have a pinned tweet
-                    pass
+        for userDict in response['data']:
+            userInstance = TwitterUser.createFromDict(userDict)
+            try:
+                pinnedTweet = tweets[userInstance.pinned_tweet_id]
+                userInstance.tweets[pinnedTweet.id] = pinnedTweet
+            except KeyError:  # users that don't have a pinned tweet
+                pass
+            users.append(userInstance)
         return users
 
     def _getUserResponse(self, userId=None, userName=None, withExpansion=True):
@@ -338,6 +343,41 @@ class TwitterAPI(object):
         users = self._extractUsersFromResponse(response=response)
         return users
 
+    def getLikingUsersOfTweet(self, tweetId, withExpansion=True):
+        """
+        You will receive the most recent 100 users who liked the specified Tweet.
+
+        App rate limit: 75 requests per 15-minute window
+        User rate limit: 75 requests per 15-minute window
+
+        :param tweetId: Tweet ID of the Tweet to request liking users of.
+        :param withExpansion: if True, pinned Tweets of users who liked the specified tweet
+        :return: users
+        """
+        str_input = f"tweets/{tweetId}/liking_users"
+
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields}
+        if withExpansion:
+            params["expansions"] = "pinned_tweet_id"
+
+        response = self._getResponse(str_input=str_input, params=params)
+
+        users = self._extractUsersFromResponse(response=response)
+
+        return users
+
+    def getLikesOfUser(self, UserId):
+        """
+        Allows you to get information about a user’s liked Tweets.
+
+        App rate limit: 75 requests per 15-minute window
+        User rate limit: 75 requests per 15-minute window
+
+        :param UserId:
+        :return: tweets
+        """
+
     def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True):
         """
         This function creates responses for getTweet and getTweets
@@ -365,7 +405,6 @@ class TwitterAPI(object):
         helper function for getTweet and getTweets
         in matchingExpansionObjectsWithTweet the author_id of linked tweets are needed
         such that their user instances can be linked with the tweet
-        :param links:
         :param tweet:
         :return:
         """
