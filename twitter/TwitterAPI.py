@@ -669,6 +669,34 @@ class TwitterAPI(object):
 
         return params
 
+    def _getTweetsFromTimeline(self, str_input, withExpansion, entriesPerPage, excludeRetweet, excludeReplies, since_id, until_id, end_time, start_time):
+        """
+        Helper function for getUserMentionTimeline and getUserTweetTimeline to prevent code duplication
+        :param str_input:
+        :param withExpansion:
+        :param entriesPerPage:
+        :param excludeRetweet:
+        :param excludeReplies:
+        :param since_id:
+        :param until_id:
+        :param end_time:
+        :param start_time:
+        :return:
+        """
+        iterations = int(3200 / entriesPerPage)
+
+        params = self._prepareParamsTimeline(withExpansion=withExpansion, entriesPerPage=entriesPerPage,
+                                             excludeRetweet=excludeRetweet, excludeReplies=excludeReplies,
+                                             since_id=since_id, until_id=until_id, start_time=start_time,
+                                             end_time=end_time)
+
+        tweets_Output = {}
+
+        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output,
+                                                            withExpansion=withExpansion, iterations=iterations,
+                                                            params=params)
+        return tweets_Output
+
     def getUserTweetTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
         """
         Only the 3200 most recent Tweets are available, ie. max 32 requests per user
@@ -682,18 +710,15 @@ class TwitterAPI(object):
         if not userId and not userName:
             raise APIError("Please provide userId or userName")
 
-        iterations = int(3200/entriesPerPage)
-
         if userId:
             str_input = f"users/{userId}/tweets"
         else:
             str_input = f"users/by/username/{userName}/tweets"
 
-        params = self._prepareParamsTimeline(withExpansion=withExpansion, entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet, excludeReplies=excludeReplies, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
-
-        tweets_Output = {}
-
-        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
+        tweets_Output = self._getTweetsFromTimeline(str_input=str_input, withExpansion=withExpansion,
+                                                    entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet,
+                                                    excludeReplies=excludeReplies, since_id=since_id, until_id=until_id,
+                                                    end_time=end_time, start_time=start_time)
 
         return tweets_Output
 
@@ -719,19 +744,15 @@ class TwitterAPI(object):
         if not userId and not userName:
             raise APIError("Please provide userId or userName")
 
-        iterations = int(800 / entriesPerPage)
-
         if userId:
             str_input = f"users/{userId}/mentions"
         else:
             str_input = f"users/by/username/{userName}/mentions"
 
-        params = self._prepareParamsTimeline(withExpansion=withExpansion, entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet, excludeReplies=excludeReplies, since_id=since_id, until_id=until_id, start_time=start_time, end_time=end_time)
-
-        tweets_Output = {}
-
-        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, tweets_Output=tweets_Output, withExpansion=withExpansion, iterations=iterations, params=params)
-
+        tweets_Output = self._getTweetsFromTimeline(str_input=str_input, withExpansion=withExpansion,
+                                                    entriesPerPage=entriesPerPage, excludeRetweet=excludeRetweet,
+                                                    excludeReplies=excludeReplies, since_id=since_id, until_id=until_id,
+                                                    end_time=end_time, start_time=start_time)
         return tweets_Output
 
     def _streamer(self, str_input, withExpansion, secondsActive, timeout):
