@@ -356,8 +356,8 @@ class TwitterAPI(object):
         """
         str_input = f"tweets/{tweetId}/liking_users"
 
-        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
-                  "place.fields": self._placeFields, "poll.fields": self._pollFields}
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields}
+
         if withExpansion:
             params["expansions"] = "pinned_tweet_id"
 
@@ -377,6 +377,7 @@ class TwitterAPI(object):
         :param UserId:
         :return: tweets
         """
+        str_input = f"users/{UserId}/liked_tweets"
 
     def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True):
         """
