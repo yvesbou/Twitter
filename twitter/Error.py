@@ -4,3 +4,7 @@ class APIError(Exception):
         return self.args[0]
 
 
+class EmptyPageError(Exception):
+    pass
+
+

@@ -9,7 +9,7 @@ import concurrent.futures
 from twitter.TwitterEntities import TwitterUser, Tweet, Poll, Place, Media
 import twitter.utils as utils
 
-from twitter.Error import APIError
+from twitter.Error import APIError, EmptyPageError
 
 
 class TwitterAPI(object):
@@ -367,17 +367,35 @@ class TwitterAPI(object):
 
         return users
 
-    def getLikesOfUser(self, UserId):
+    def getLikesOfUser(self, userId, withExpansion=True, entriesPerPage=100):
         """
         Allows you to get information about a user’s liked Tweets.
 
         App rate limit: 75 requests per 15-minute window
         User rate limit: 75 requests per 15-minute window
 
-        :param UserId:
+        :param entriesPerPage:
+        :param withExpansion:
+        :param userId:
         :return: tweets
         """
-        str_input = f"users/{UserId}/liked_tweets"
+        str_input = f"users/{userId}/liked_tweets"
+
+        params = {"tweet.fields": self._tweetFields, "user.fields": self._userFields, "media.fields": self._mediaFields,
+                  "place.fields": self._placeFields, "poll.fields": self._pollFields, "max_results": f"{entriesPerPage}"}
+
+        if withExpansion:
+            params["expansions"] = [
+                    "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
+
+        tweets_Output = {}
+
+        iterations = 75
+
+        self._creatingTweetObjectsFromMultipleResponsePages(str_input=str_input, params=params, tweets_Output=tweets_Output,
+                                                            withExpansion=withExpansion, iterations=iterations)
+
+        return tweets_Output
 
     def _getTweetResponse(self, tweetId=None, tweetIds=None, withExpansion=True):
         """
@@ -391,9 +409,11 @@ class TwitterAPI(object):
                   "place.fields": self._placeFields, "poll.fields": self._pollFields}
         if tweetId:
             str_input = f"tweets/{tweetId}"
-        if tweetIds:
+        elif tweetIds:
             str_input = "tweets"
             params['ids'] = ','.join([str(id) for id in tweetIds])
+        else:
+            raise ValueError("please provide either tweetId or tweetIds")
         if withExpansion:
             params["expansions"] = [
                     "author_id,attachments.poll_ids,attachments.media_keys,entities.mentions.username,geo.place_id,in_reply_to_user_id,referenced_tweets.id,referenced_tweets.id.author_id"]
@@ -456,9 +476,7 @@ class TwitterAPI(object):
             raise APIError("Please provide TweetId")
 
         response = self._getTweetResponse(tweetId=tweetId, withExpansion=withExpansion)
-
         tweets_Output = {}
-
         self._handleTweetResponse(response, tweets_Output, withExpansion)
 
         return list(tweets_Output.values())[0]
@@ -474,6 +492,7 @@ class TwitterAPI(object):
         response = self._getTweetResponse(tweetId=tweetIds, withExpansion=withExpansion)
         tweets_Output = {}
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
+
         return tweets_Output
 
     def getRecentTweetsFromSearch(self, searchQuery, withExpansion, entriesPerPage=100, since_id=None, until_id=None, start_time=None, end_time=None):
@@ -610,6 +629,10 @@ class TwitterAPI(object):
             tweets_Output[tweet.id] = tweet
 
     def _handleMultipleTweetResponse(self, response, tweets_Output, withExpansion):
+        if response['meta']['result_count'] == 0:
+            # Sometimes a next page token is sent by Twitter (which leads to a further request)
+            # even though this next page will be empty. Meaning a response with no 'data' and 'includes'.
+            raise EmptyPageError
         if withExpansion:
             ExpansionObjects = self._createExpansionObjects(response=response)
             for tweetDict in response['data']:
@@ -621,6 +644,16 @@ class TwitterAPI(object):
                 tweets_Output[tweet.id] = tweet
 
     def _creatingTweetObjectsFromMultipleResponsePages(self, str_input, tweets_Output, withExpansion, iterations, params):
+        """
+        This function makes requests and receives from endpoints data that is possibly organised
+        in multiple pages, to handle the multiple pages, this function exists.
+        :param str_input:
+        :param tweets_Output:
+        :param withExpansion:
+        :param iterations:
+        :param params:
+        :return:
+        """
         response = self._getResponse(str_input=str_input, params=params)
         self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output, withExpansion=withExpansion)
 
@@ -629,8 +662,13 @@ class TwitterAPI(object):
                 token = response['meta']['next_token']
                 params['pagination_token'] = token
                 response = self._getResponse(str_input=str_input, params=params)
-                self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output,
-                                                  withExpansion=withExpansion)
+                try:
+                    self._handleMultipleTweetResponse(response=response, tweets_Output=tweets_Output,
+                                                      withExpansion=withExpansion)
+                except EmptyPageError as error:
+                    # No need to communicate this error, as the Twitter API provided useless data which the client
+                    # will not realise
+                    break
             else:
                 break
 

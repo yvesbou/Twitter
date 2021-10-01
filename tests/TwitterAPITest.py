@@ -613,6 +613,17 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual("Together Making The Greatest Future", likingUsers[0].description)
         self.assertEqual("736816434152513538", likingUsers[3].tweets["1354485777497874433"].author_id)
 
+    def testGetLikesOfUser(self):
+        self.responses = responses.RequestsMock()
+        self.responses.start()
+        with open('../testdata/LikedTweetsByUser.json', 'r') as f:
+            data = f.read()
+            f.close()
+        self.responses.add(GET, url=URL, body=data)
+        likedTweets = self.api.getLikesOfUser(userId=1380593146971762690, withExpansion=True)
+        self.assertEqual(17, len(list(likedTweets.values())))
+        self.assertEqual(2, len(likedTweets['1439536277976666125'].users))
+
 
 if __name__ == '__main__':
     unittest.main()
