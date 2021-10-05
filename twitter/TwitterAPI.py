@@ -10,10 +10,11 @@ from twitter.TwitterEntities import TwitterUser, Tweet, Poll, Place, Media
 import twitter.utils as utils
 
 from twitter.Error import APIError, EmptyPageError
+from twitter.APIRateLimit import APIRateLimit
 
 
 class TwitterAPI(object):
-    def __init__(self, bearer_token):
+    def __init__(self, bearer_token, TweetCapResetDate=None):
         self.__bearer_token = bearer_token
         self._userFields = "created_at,description,entities,id,location,name,pinned_tweet_id,profile_image_url,protected,public_metrics,url,username,verified,withheld"
         # promoted_metrics,organic_metrics,private_metrics currently not part of tweetFields
@@ -738,8 +739,8 @@ class TwitterAPI(object):
 
     def getUserTweetTimeline(self, userId=None, userName=None, withExpansion=True, entriesPerPage=100, excludeRetweet=False, excludeReplies=False, since_id=None, until_id=None, end_time=None, start_time=None):
         """
-        Only the 3200 most recent Tweets are available, ie. max 32 requests per user
         Returns Tweets composed by a single user, specified by the requested user ID.
+        Only the 3200 most recent Tweets are available, ie. max 32 requests per user
         By default, the most recent ten Tweets are returned per request.
         Using pagination, the most recent 3,200 Tweets can be retrieved.
         :param: start_time: Minimum allowable time is 2010-11-06T00:00:01Z (Provide in ISO8601)
