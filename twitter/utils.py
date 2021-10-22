@@ -16,7 +16,6 @@ def encodeDecodeTwitterText(twitterText):
     return twitterText.encode('utf-16', 'surrogatepass').decode('utf-16').encode('utf-8').decode('utf-8')
 
 
-
 def datetime_valid(dt_str):
     try:
         datetime.fromisoformat(dt_str)
@@ -27,3 +26,11 @@ def datetime_valid(dt_str):
             return False
         return True
     return True
+
+
+def IfWaitTooLong(now, then):
+    diff = then - now
+    if diff > 30:
+        return True
+    else:
+        return False

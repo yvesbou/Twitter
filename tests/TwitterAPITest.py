@@ -40,6 +40,7 @@ class TwitterAPITest(unittest.TestCase):
     def testSetUpAPI(self):
         self.assertEqual('xxx', self.api._TwitterAPI__bearer_token)
 
+    # todo: new functionName
     @responses.activate
     def testGetUser_withoutExpansion_wUserId(self):
         self.responses = responses.RequestsMock()
@@ -59,6 +60,7 @@ class TwitterAPITest(unittest.TestCase):
         self.assertEqual(self.user.tweets, {})
         self.assertIsInstance(self.user, twitter.TwitterUser)
 
+    # todo: new functionName
     @responses.activate
     def testGetUsers_withExpansion_wMultipleUserNames(self):
         self.responses = responses.RequestsMock()
@@ -72,6 +74,7 @@ class TwitterAPITest(unittest.TestCase):
         pinned_tweet_id = users[0].pinned_tweet_id
         self.assertIsInstance(users[0].tweets[pinned_tweet_id], twitter.Tweet)
 
+    # todo: new functionName
     @responses.activate
     def testGetUsers_withExpansion_wMultipleIds(self):
         self.responses = responses.RequestsMock()
@@ -93,6 +96,7 @@ class TwitterAPITest(unittest.TestCase):
         self.responses.add(GET, url=URL, body=data)
         self.assertRaises(twitter.APIError, self.api.getUser)
 
+    # todo: new functionName
     @responses.activate
     def testGetUser_withExpansion(self):
         self.responses = responses.RequestsMock()
@@ -105,6 +109,7 @@ class TwitterAPITest(unittest.TestCase):
         tweet = next(iter(resp.tweets.values()))  # just one entry
         self.assertIsInstance(tweet, twitter.Tweet)
 
+    # todo: new functionName
     @responses.activate
     def testGetUser_withExpansion_missingTweet(self):
         self.responses = responses.RequestsMock()
